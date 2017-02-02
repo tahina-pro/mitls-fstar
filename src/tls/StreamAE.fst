@@ -7,6 +7,7 @@ module StreamAE
 // plaintexts; concretely, we use AES_GCM but any other AEAD algorithm
 // would do.
 
+open FStar.ST
 open FStar.Heap
 open FStar.HyperHeap
 open FStar.HyperStack

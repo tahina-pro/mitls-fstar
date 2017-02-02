@@ -3,6 +3,7 @@ options:--use_hints --fstar_home ../../../FStar --detail_errors --include ../../
 --*)
 (* A library for monotonic references to partial, dependent maps, with a whole-map invariant *)
 module MonotoneMap
+open FStar.ST
 open FStar.Monotonic.RRef
 open FStar.HyperHeap
 

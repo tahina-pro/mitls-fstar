@@ -1,4 +1,5 @@
 module ConnInvariant
+open FStar.ST
 open TLSConstants
 open TLSInfo
 open Negotiation

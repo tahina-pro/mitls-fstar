@@ -1,5 +1,6 @@
 module Epochs
 
+open FStar.ST
 open FStar.Heap
 open FStar.HyperHeap
 open FStar.Seq // DO NOT move further below, it would shadow `FStar.HyperStack.mem`

@@ -7,6 +7,7 @@ module StatefulLHAE
 // Implemented by appending a fragment sequence number to the additional data of
 // the underlying LHAE scheme
 
+open FStar.ST
 open FStar.Heap
 open FStar.HyperHeap
 open FStar.HyperStack

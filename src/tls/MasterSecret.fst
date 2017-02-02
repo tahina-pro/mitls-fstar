@@ -1,5 +1,6 @@
 (* An experiment towards the PRF in KeySchedule, collapsing master and key derivation *)
 module MasterSecret (* : ST _ _ _ *)
+open FStar.ST
 open FStar.HyperHeap
 open FStar.HyperStack
 open TLSConstants

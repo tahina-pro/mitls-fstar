@@ -1,5 +1,6 @@
 ﻿module DHGroup
 
+open FStar.ST
 open FStar.HyperHeap
 open Platform.Bytes
 open Platform.Error

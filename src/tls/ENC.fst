@@ -9,6 +9,7 @@
 (* Instead, we could write a well-typed ideal functionality and reduce
    it to its non-agile underlying algorithms, e.g. AES-CBC *)
 
+open FStar.ST
 open FStar.Heap
 open FStar.HyperHeap
 open FStar.HyperStack

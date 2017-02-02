@@ -1,5 +1,6 @@
 ﻿module CommonDH
 
+open FStar.ST
 open Platform.Bytes
 open Platform.Error
 open CoreCrypto

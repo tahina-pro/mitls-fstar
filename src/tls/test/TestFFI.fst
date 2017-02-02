@@ -2,6 +2,7 @@ module TestFFI
 
 // a variant of TestAPI for testing FFI.fst
 
+open FStar.All
 open FStar.Seq
 open FStar.HyperHeap
 open Platform.Bytes

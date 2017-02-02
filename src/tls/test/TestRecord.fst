@@ -1,5 +1,7 @@
 module TestRecord
 
+open FStar.All
+
 open Platform.Bytes
 
 open TLSConstants

@@ -7,6 +7,7 @@ module StAE
 // multiplexing StatefulLHAE and StreamAE with (some) length hiding
 // (for now, under-specifying ciphertexts lengths and values)
 
+open FStar.ST
 open FStar.HyperHeap
 open FStar.HyperStack
 open Platform.Bytes

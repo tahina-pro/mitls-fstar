@@ -9,6 +9,7 @@ module Encode
    16-01-04 verifies with temporary assumptions; TBC
  *)
 
+open FStar.ST
 open FStar.Seq
 open Platform
 open Platform.Bytes

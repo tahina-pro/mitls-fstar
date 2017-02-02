@@ -4,6 +4,7 @@ module KeySchedule
 (* the goal is to keep ephemerals like eph_s and eph_c as currently defined
    in Handshake local *)
 
+open FStar.ST
 open FStar.Heap
 open FStar.HyperHeap
 open FStar.HyperStack

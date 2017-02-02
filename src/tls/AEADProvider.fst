@@ -3,6 +3,7 @@ options:--use_hints --fstar_home ../../../FStar --include ../../../FStar/ucontri
 --*)
 module AEADProvider
 
+open FStar.ST
 open FStar.Heap
 open FStar.HyperHeap
 open FStar.HyperStack

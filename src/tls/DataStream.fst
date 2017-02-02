@@ -6,6 +6,7 @@ module DataStream
 
 //* now generalized to include signals; rename to Stream?
 
+open FStar.All
 open FStar.Heap
 open FStar.HyperHeap
 open FStar.HyperStack
