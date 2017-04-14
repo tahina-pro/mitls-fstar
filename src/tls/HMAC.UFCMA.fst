@@ -5,9 +5,9 @@ options:--use_hints --fstar_home ../../../FStar --include ../../../FStar/ucontri
 
 (* Idealizing HMAC for Finished message payloads and binders. *)
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 open FStar.Seq
  // for e.g. found
 

@@ -11,7 +11,7 @@ share is for registered shares (for which is_honest is defined).
 *)
 ﻿module CommonDH
 
-open FStar.HyperStack
+open TLSMem
 open Platform.Bytes
 open Platform.Error
 open CoreCrypto

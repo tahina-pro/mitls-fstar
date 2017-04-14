@@ -7,9 +7,9 @@ module StatefulLHAE
 // Implemented by appending a fragment sequence number to the additional data of
 // the underlying LHAE scheme
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 open FStar.Seq
 open FStar.Monotonic.RRef
 open FStar.Monotonic.Seq
@@ -61,7 +61,7 @@ val encrypt: #i:id -> e:writer i -> ad:adata i
   -> p:plain i ad r
   -> ST (cipher i)
      (requires (fun h0 ->
-       HyperHeap.disjoint e.region (AEADProvider.log_region e.aead) /\
+       TLSMem.disjoint e.region (AEADProvider.log_region e.aead) /\
        m_sel h0 (ctr e.counter) < max_ctr (alg i)))
      (ensures  (fun h0 c h1 ->
        modifies (Set.as_set [e.log_region; AEADProvider.log_region e.aead]) h0 h1

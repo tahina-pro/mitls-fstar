@@ -3,9 +3,9 @@ options:--use_hints --fstar_home ../../../FStar --include ../../../FStar/ucontri
 --*)
 module AEADProvider
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 open FStar.Seq
 open Platform.Bytes
 
@@ -240,7 +240,7 @@ let leak (#i:id) (#rw:rw) (st:state i rw)
 // the reader and writer (this is not sound for some buffers in that
 // region, for instance, the writer may write the the reader's key buffer)
 let genReader (parent:rgn) (#i:id) (st:writer i) : ST (reader i)
-  (requires (fun h -> HyperHeap.disjoint parent (region st)))
+  (requires (fun h -> TLSMem.disjoint parent (region st)))
   (ensures (fun h0 _ h1 -> modifies_none h0 h1))
   =
   match st with

@@ -1,7 +1,7 @@
 module Signature
 
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
 open FStar.Monotonic.RRef
 open FStar.Monotonic.Seq
 

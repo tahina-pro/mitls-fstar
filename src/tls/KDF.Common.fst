@@ -10,9 +10,9 @@ options:--use_hints --fstar_home ../../../FStar --include ../../../FStar/ucontri
  *)
 module KDF.Common
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 
 open Platform.Bytes
 open Platform.Error
@@ -22,8 +22,8 @@ open TLSInfo
 
 module MM = MonotoneMap
 module MR = FStar.Monotonic.RRef
-module HH = FStar.HyperHeap
-module HS = FStar.HyperStack
+module HH = TLSMem
+module HS = TLSMem
 
 (* Source index is a secret index *)
 type id = secretId

@@ -1,9 +1,9 @@
 ﻿(** computational assumption: collision resistance *)
 module Hashing.CRF
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 
 open Platform.Bytes
 open Hashing.Spec

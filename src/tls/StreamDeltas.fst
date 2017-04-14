@@ -2,13 +2,13 @@ module StreamDeltas
 open Platform.Bytes
 open Platform.Error
 
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
 open TLSConstants
 open TLSInfo
 
-module HH   = FStar.HyperHeap
-module HS   = FStar.HyperStack
+module HH   = TLSMem
+module HS   = TLSMem
 module MR   = FStar.Monotonic.RRef
 module MS   = FStar.Monotonic.Seq
 module S    = StAE

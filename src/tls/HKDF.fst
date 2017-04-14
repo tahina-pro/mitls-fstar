@@ -18,7 +18,7 @@ private val hkdf_expand_int: ha:hash_alg
   -> prev:bytes
   -> ST (b:bytes{len - curr <= length b}) (decreases (max 0 (len - curr)))
   (requires (fun h0 -> True))
-  (ensures (fun h0 t h1 -> FStar.HyperStack.modifies Set.empty h0 h1))
+  (ensures (fun h0 t h1 -> TLSMem.modifies Set.empty h0 h1))
 
 let rec hkdf_expand_int ha prk info len count curr prev =
   if curr < len && count + 1 < 256 then

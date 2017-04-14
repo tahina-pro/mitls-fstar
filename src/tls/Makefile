@@ -98,6 +98,7 @@ endif
 
 FSTS=Flags.fst \
 MonotoneMap.fst \
+TLSMem.fst \
 TLSError.fst \
 Hashing.Spec.fst \
 Parse.fst \

@@ -38,9 +38,9 @@ let ks_client_13_cf: ks:ks -> li:logInfo_CF -> h:hashed_log (LogInfo_CF li) -> S
 
 *)
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 open FStar.Seq
 open FStar.Set
 
@@ -57,8 +57,8 @@ open PSK
 
 module MM = MonotoneMap
 module MR = FStar.Monotonic.RRef
-module HH = FStar.HyperHeap
-module HS = FStar.HyperStack
+module HH = TLSMem
+module HS = TLSMem
 
 let hashSize = Hashing.Spec.tagLen
 
@@ -406,8 +406,8 @@ let ks_client_13_0rtt_ch ks esId hashed_log : ST (recordInstance)
   let id = ID13 (KeyID expandId EarlyApplicationDataKey Client loginfo hashed_log) in
   let ckv: StreamAE.key id = ck' in
   let civ: StreamAE.iv id  = civ' in
-  let rw = StAE.coerce HyperHeap.root id (ckv @| civ) in
-  let r = StAE.genReader HyperHeap.root rw in
+  let rw = StAE.coerce TLSMem.root id (ckv @| civ) in
+  let r = StAE.genReader TLSMem.root rw in
   let early_d = StAEInstance r rw in
 
   st := C (C_13_wait_SH cr (Some (| esId, es |)) (Some (| efId, cfk0 |)) gs);
@@ -512,8 +512,8 @@ let ks_server_13_0rtt_init ks cr esId hashed_log cs (|g,gx|) =
   let id = ID13 (KeyID expandId EarlyApplicationDataKey Client loginfo hashed_log) in
   let ckv: StreamAE.key id = ck' in
   let civ: StreamAE.iv id  = civ' in
-  let rw = StAE.coerce HyperHeap.root id (ckv @| civ) in
-  let r = StAE.genReader HyperHeap.root rw in
+  let rw = StAE.coerce TLSMem.root id (ckv @| civ) in
+  let r = StAE.genReader TLSMem.root rw in
   let early_d = StAEInstance r rw in
 
   let gy, gxy = CommonDH.dh_responder gx in
@@ -601,9 +601,9 @@ let ks_server_13_sh ks hashed_log =
   let civ: StreamAE.iv id  = civ in
   let skv: StreamAE.key (peerId id) = sk in
   let siv: StreamAE.iv (peerId id)  = siv in
-  let w = StAE.coerce HyperHeap.root id (skv @| siv) in
-  let rw = StAE.coerce HyperHeap.root id (ckv @| civ) in
-  let r = StAE.genReader HyperHeap.root rw in
+  let w = StAE.coerce TLSMem.root id (skv @| siv) in
+  let rw = StAE.coerce TLSMem.root id (ckv @| civ) in
+  let r = StAE.genReader TLSMem.root rw in
 
   // Finished keys
   let cfkId = FinishedID expandId HandshakeFinished Client loginfo hashed_log in
@@ -669,9 +669,9 @@ private let ks_12_record_key ks =
     match role with
     | Client -> k1, iv1, k2, iv2
     | Server -> k2, iv2, k1, iv1 in
-  let w = StAE.coerce HyperHeap.root id (wk @| wiv) in
-  let rw = StAE.coerce HyperHeap.root id (rk @| riv) in
-  let r = StAE.genReader HyperHeap.root rw in
+  let w = StAE.coerce TLSMem.root id (wk @| wiv) in
+  let rw = StAE.coerce TLSMem.root id (rk @| riv) in
+  let r = StAE.genReader TLSMem.root rw in
   StAEInstance r w
 
 (******************************************************************)
@@ -814,9 +814,9 @@ let ks_client_13_sh ks sr cs hashed_log (| g, gy|) accept_ed =
   let civ: StreamAE.iv id  = civ in
   let skv: StreamAE.key (peerId id) = sk in
   let siv: StreamAE.iv (peerId id)  = siv in
-  let w = StAE.coerce HyperHeap.root id (ckv @| civ) in
-  let rw = StAE.coerce HyperHeap.root id (skv @| siv) in
-  let r = StAE.genReader HyperHeap.root rw in
+  let w = StAE.coerce TLSMem.root id (ckv @| civ) in
+  let rw = StAE.coerce TLSMem.root id (skv @| siv) in
+  let r = StAE.genReader TLSMem.root rw in
   st := C (C_13_wait_SF (ae, h) (| cfkId, cfk1 |) (| sfkId, sfk1 |) (| asId, ams |));
   StAEInstance r w
 
@@ -914,11 +914,11 @@ let ks_client_13_sf ks (hashed_log:bytes)
   let id = ID13 (KeyID expandId ApplicationDataKey Client loginfo hashed_log) in
   let ckv: StreamAE.key id = ck in
   let civ: StreamAE.iv id  = civ in
-  let w = StAE.coerce HyperHeap.root id (ckv @| civ) in
+  let w = StAE.coerce TLSMem.root id (ckv @| civ) in
   let skv: StreamAE.key (peerId id) = sk in
   let siv: StreamAE.iv (peerId id)  = siv in
-  let rw = StAE.coerce HyperHeap.root id (skv @| siv) in
-  let r = StAE.genReader HyperHeap.root rw in
+  let rw = StAE.coerce TLSMem.root id (skv @| siv) in
+  let r = StAE.genReader TLSMem.root rw in
 
   st := C (C_13_wait_CF alpha cfk (| asId, ams |) (| ri, rk1 |) (| cfkId, late_cfk |));
   (sfk, cfk, StAEInstance r w)
@@ -959,11 +959,11 @@ let ks_server_13_sf ks hashed_log : ST (recordInstance)
   let id = ID13 (KeyID expandId ApplicationDataKey Server loginfo hashed_log) in
   let skv: StreamAE.key id = sk in
   let siv: StreamAE.iv id  = siv in
-  let w = StAE.coerce HyperHeap.root id (skv @| siv) in
+  let w = StAE.coerce TLSMem.root id (skv @| siv) in
   let ckv: StreamAE.key (peerId id) = ck in
   let civ: StreamAE.iv (peerId id)  = civ in
-  let rw = StAE.coerce HyperHeap.root id (ckv @| civ) in
-  let r = StAE.genReader HyperHeap.root rw in
+  let rw = StAE.coerce TLSMem.root id (ckv @| civ) in
+  let r = StAE.genReader TLSMem.root rw in
 
   st := S (S_13_wait_CF alpha cfk (| asId, ams |) (| ri, rk1 |) (| cfkId, late_cfk |));
   StAEInstance r w

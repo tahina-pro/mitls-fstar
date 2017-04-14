@@ -1,7 +1,7 @@
 module Alert
 
-open FStar.Heap
-open FStar.HyperHeap
+open TLSMem
+open TLSMem
 open FStar.Seq
 
 open Platform.Error

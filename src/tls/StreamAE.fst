@@ -7,9 +7,9 @@ module StreamAE
 // plaintexts; concretely, we use AES_GCM but any other AEAD algorithm
 // would do.
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 open FStar.Seq
  // for e.g. found
 open FStar.Monotonic.RRef
@@ -24,8 +24,8 @@ open TLSInfo
 open StreamPlain
 
 module AEAD = AEADProvider
-module HH = FStar.HyperHeap
-module HS = FStar.HyperStack
+module HH = TLSMem
+module HS = TLSMem
 
 type rid = FStar.Monotonic.RRef.rid
 
@@ -87,7 +87,7 @@ let ctr (#l:rid) (#r:rid) (#i:id) (#log:log_ref l i) (c:ctr_ref r i log)
 // kept concrete for log and counter, but the key and iv should be private.
 noeq type state (i:id) (rw:rw) =
   | State: #region: rgn
-         -> #log_region: rgn{if rw = Writer then region = log_region else HyperHeap.disjoint region log_region}
+         -> #log_region: rgn{if rw = Writer then region = log_region else TLSMem.disjoint region log_region}
          -> aead: AEAD.state i rw
          -> log: log_ref log_region i // ghost, subject to cryptographic assumption
          -> counter: ctr_ref region i log // types are sufficient to anti-alias log and counter
@@ -141,8 +141,8 @@ let gen parent i =
 
 #reset-options
 val genReader: parent:rgn -> #i:id -> w:writer i -> ST (reader i)
-  (requires (fun h0 -> HyperHeap.disjoint parent w.region /\
-  HyperHeap.disjoint parent (AEAD.region w.aead))) //16-04-25  we may need w.region's parent instead
+  (requires (fun h0 -> TLSMem.disjoint parent w.region /\
+  TLSMem.disjoint parent (AEAD.region w.aead))) //16-04-25  we may need w.region's parent instead
   (ensures  (fun h0 (r:reader i) h1 ->
          modifies Set.empty h0 h1 /\
          r.log_region = w.region /\
@@ -160,7 +160,7 @@ val genReader: parent:rgn -> #i:id -> w:writer i -> ST (reader i)
 let genReader parent #i w =
   let reader_r = new_region parent in
   let writer_r : rgn = w.region in
-  assert(HyperHeap.disjoint writer_r reader_r);
+  assert(TLSMem.disjoint writer_r reader_r);
   lemma_ID13 i;
   let raead = AEAD.genReader parent #i w.aead in
   if authId i then
@@ -201,7 +201,7 @@ private abstract let noAD = empty_bytes
 val encrypt: #i:id -> e:writer i -> l:plainLen -> p:plain i l -> ST (cipher i l)
     (requires (fun h0 ->
       lemma_ID13 i;
-      HyperHeap.disjoint e.region (AEAD.log_region #i e.aead) /\
+      TLSMem.disjoint e.region (AEAD.log_region #i e.aead) /\
       l <= max_TLSPlaintext_fragment_length /\ // FIXME ADL: why is plainLen <= max_TLSCiphertext_fragment_length_13 ?? Fix StreamPlain!
       m_sel h0 (ctr e.counter) < max_ctr))
     (ensures  (fun h0 c h1 ->

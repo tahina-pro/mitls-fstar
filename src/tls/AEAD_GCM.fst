@@ -5,9 +5,9 @@ module AEAD_GCM
 // AEAD-GCM mode for the TLS record layer, as specified in RFC 5288.
 // We support both AES_128_GCM and AES_256_GCM, differing only in their key sizes
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 open FStar.Seq
 open Platform.Bytes
 open CoreCrypto
@@ -74,7 +74,7 @@ let ctr (#l:rgn) (#r:rgn) (#i:id) (#log:log_ref l i) (c:ctr_ref r i log)
 // kept concrete for log and counter, but the key and iv should be private.
 noeq type state (i:id) (rw:rw) =
   | State: #region: rgn
-         -> #log_region: rgn{if rw = Writer then region = log_region else HyperHeap.disjoint region log_region}
+         -> #log_region: rgn{if rw = Writer then region = log_region else TLSMem.disjoint region log_region}
          -> aead: AEAD.state i rw
          -> log: log_ref log_region i // ghost subject to cryptographic assumption
          -> counter: ctr_ref region i log // types are sufficient to anti-alias log and counter
@@ -132,8 +132,8 @@ let gen parent i =
 
 val genReader: parent:rgn -> #i:id -> w:writer i -> ST (reader i)
   (requires (fun h0 ->
-    HyperHeap.disjoint parent w.region /\
-    HyperHeap.disjoint parent (AEAD.region w.aead)))
+    TLSMem.disjoint parent w.region /\
+    TLSMem.disjoint parent (AEAD.region w.aead)))
   (ensures  (fun h0 (r:reader i) h1 ->
     modifies Set.empty h0 h1 /\
     r.log_region = w.region /\
@@ -146,7 +146,7 @@ val genReader: parent:rgn -> #i:id -> w:writer i -> ST (reader i)
 let genReader parent #i w =
   let reader_r = new_region parent in
   let wr : rgn = w.region in
-  assert(HyperHeap.disjoint wr reader_r);
+  assert(TLSMem.disjoint wr reader_r);
   let raead = AEAD.genReader parent w.aead in
   if authId i then
     let log : ideal_log w.region i = w.log in
@@ -221,7 +221,7 @@ val encrypt: #i:id -> e:writer i -> ad:adata i
   -> p:plain i ad r
   -> ST (cipher i)
        (requires (fun h0 ->
-         HyperHeap.disjoint e.region (AEAD.log_region e.aead) /\
+         TLSMem.disjoint e.region (AEAD.log_region e.aead) /\
          m_sel h0 (ctr e.counter) < max_ctr (alg i)))
        (ensures  (fun h0 c h1 ->
         modifies (Set.as_set [e.log_region; AEAD.log_region e.aead]) h0 h1

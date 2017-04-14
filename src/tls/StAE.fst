@@ -7,15 +7,15 @@ module StAE
 // multiplexing StatefulLHAE and StreamAE with (some) length hiding
 // (for now, under-specifying ciphertexts lengths and values)
 
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
 open Platform.Bytes
 
 open TLSConstants
 open TLSInfo
 
-module HH   = FStar.HyperHeap
-module HS   = FStar.HyperStack
+module HH   = TLSMem
+module HS   = TLSMem
 module MR   = FStar.Monotonic.RRef
 module MS   = FStar.Monotonic.Seq
 module C    = Content
@@ -263,7 +263,7 @@ let gen parent i =
 
 #set-options "--z3rlimit 100 --initial_fuel 1 --max_fuel 1 --initial_ifuel 1 --max_ifuel 1"
 val genReader: parent:rgn -> #i:id -> w:writer i -> ST (reader i)
-  (requires (fun h0 -> HyperHeap.disjoint parent (region #i #Writer w))) //16-04-25  we may need w.region's parent instead
+  (requires (fun h0 -> TLSMem.disjoint parent (region #i #Writer w))) //16-04-25  we may need w.region's parent instead
   (ensures  (fun h0 (r:reader i) h1 ->
                modifies Set.empty h0 h1 /\
                log_region r = region #i #Writer w /\
@@ -277,11 +277,11 @@ let genReader parent #i w =
   match w with
   | Stream _ w ->
     lemma_ID13 i;
-    assume(StreamAE.(HyperHeap.disjoint parent (AEADProvider.region #i w.aead)));
+    assume(StreamAE.(TLSMem.disjoint parent (AEADProvider.region #i w.aead)));
     Stream () (Stream.genReader parent #i w)
   | StLHAE _ w ->
     lemma_ID12 i;
-    assume(AEAD_GCM.(HyperHeap.disjoint parent (AEADProvider.region #i w.aead)));
+    assume(AEAD_GCM.(TLSMem.disjoint parent (AEADProvider.region #i w.aead)));
     StLHAE () (StLHAE.genReader parent #i w)
 
 

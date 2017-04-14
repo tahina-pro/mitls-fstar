@@ -1,8 +1,8 @@
 module Nego
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 
 open Hashing
 open Signature

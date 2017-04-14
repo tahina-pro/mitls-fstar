@@ -1,7 +1,7 @@
 module RPC
 
-open FStar.Heap
-open FStar.HyperHeap
+open TLSMem
+open TLSMem
 open FStar.Monotonic.RRef
 open FStar.Seq
 

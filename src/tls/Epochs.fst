@@ -7,10 +7,10 @@ module Epochs
     (i.e. we only keep old epoch AE logs for specifying authentication)
 *)
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.Seq // DO NOT move further below, it would shadow `FStar.HyperStack.mem`
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open FStar.Seq // DO NOT move further below, it would shadow `TLSMem.mem`
+open TLSMem
 open FStar.Monotonic.RRef
 open FStar.Monotonic.Seq
 open Platform.Error
@@ -24,8 +24,8 @@ open Range
 open StAE
 //open Negotiation
 
-module HH = FStar.HyperHeap
-module HS = FStar.HyperStack
+module HH = TLSMem
+module HS = TLSMem
 module MR = FStar.Monotonic.RRef
 module MS = FStar.Monotonic.Seq
 type random = TLSInfo.random 

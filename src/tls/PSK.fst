@@ -3,9 +3,9 @@ options:--use_hints --fstar_home ../../../FStar --include ../../../FStar/ucontri
 --*)
 module PSK
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 
 open Platform.Bytes
 open Platform.Error
@@ -14,8 +14,8 @@ open TLSConstants
 
 module MM = MonotoneMap
 module MR = FStar.Monotonic.RRef
-module HH = FStar.HyperHeap
-module HS = FStar.HyperStack
+module HH = TLSMem
+module HS = TLSMem
 
 
 // <from TLSConstants>

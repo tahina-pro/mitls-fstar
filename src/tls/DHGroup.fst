@@ -3,7 +3,7 @@ options:--use_hints --fstar_home ../../../FStar --include ../../../FStar/ucontri
 --*)
 ﻿module DHGroup
 
-open FStar.HyperStack
+open TLSMem
 open Platform.Bytes
 open Platform.Error
 open CoreCrypto

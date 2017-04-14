@@ -1,8 +1,8 @@
 ﻿module MAC_SHA1
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 open FStar.Seq
  // for e.g. found
 

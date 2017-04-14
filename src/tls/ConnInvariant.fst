@@ -9,8 +9,8 @@ open Connection
 module MM = MonotoneMap
 module MR = FStar.Monotonic.RRef
 module MonSeq = FStar.Monotonic.Seq
-module HH = FStar.HyperHeap
-module HST = FStar.HyperStack
+module HH = TLSMem
+module HST = TLSMem
 module MS = MasterSecret
 module N  = Nonce
 module I  = IdNonce

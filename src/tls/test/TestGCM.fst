@@ -1,7 +1,7 @@
 module TestGCM
 
-open FStar.Heap
-open FStar.HyperHeap
+open TLSMem
+open TLSMem
 open FStar.IO
 
 open Platform.Bytes

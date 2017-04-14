@@ -8,8 +8,8 @@ open TLSInfo
 module N=Nonce
 module MM = MonotoneMap
 module MR = FStar.Monotonic.RRef
-module HH = FStar.HyperHeap
-module HS = FStar.HyperStack
+module HH = TLSMem
+module HS = TLSMem
 
 //The goal of the rest of the module is to provide id_of_nonce
 //and to prove that the two are mutual inverses

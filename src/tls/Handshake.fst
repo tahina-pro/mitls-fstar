@@ -2,9 +2,9 @@
 --*)
 module Handshake
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 //FIXME! Don't open so much ... gets confusing. Use module abbrevs instead
 //AR: Yes ! Totally agree.
 //CF: TODO. Ideally use module names, not abbrevs.
@@ -27,7 +27,7 @@ open Handshake.Log // only for Outgoing
 open Epochs
 
 module Sig = Signature
-module HH = FStar.HyperHeap
+module HH = TLSMem
 module MR = FStar.Monotonic.RRef
 module MS = FStar.Monotonic.Seq
 module Nego = Negotiation
@@ -122,7 +122,7 @@ let epochs_of s = s.epochs
 
 
 let stateType (s:hs) = seq (epoch s.region s.nonce) * machineState
-let stateT (s:hs) (h:HyperStack.mem) : GTot (stateType s) = (logT s h, sel h s.state)
+let stateT (s:hs) (h:TLSMem.mem) : GTot (stateType s) = (logT s h, sel h s.state)
 
 let forall_epochs (hs:hs) h (p:(epoch hs.region hs.nonce -> Type)) =
   (let es = logT hs h in
@@ -169,36 +169,36 @@ let completed #rgn #nonce e = True
 
 assume val hs_invT : s:hs -> epochs:seq (epoch s.region s.nonce) -> machineState -> Type0
 
-let hs_inv (s:hs) (h: HyperStack.mem) = True
+let hs_inv (s:hs) (h: TLSMem.mem) = True
 (* 17-04-08 TODO deal with inferred logic qualifiers
   hs_invT s (logT s h) (sel h (HS?.state s))  //An abstract invariant of HS-internal state
   /\ Epochs.containsT s.epochs h                //Nothing deep about these next two, since they can always
-  /\ HyperHeap.contains_ref s.state.ref (HyperStack.HS?.h h)                 //be recovered by 'recall'; carrying them in the invariant saves the trouble
+  /\ TLSMem.contains_ref s.state.ref (TLSMem.HS?.h h)                 //be recovered by 'recall'; carrying them in the invariant saves the trouble
 
 //A framing lemma with a very trivial proof, because of the way stateT abstracts the state-dependent parts
 *)
 
 #set-options "--lax"
-let frame_iT_trivial  (s:hs) (rw:rw) (h0:HyperStack.mem) (h1:HyperStack.mem)
+let frame_iT_trivial  (s:hs) (rw:rw) (h0:TLSMem.mem) (h1:TLSMem.mem)
   : Lemma (stateT s h0 = stateT s h1  ==>  iT s rw h0 = iT s rw h1)
   = ()
 
 //Here's a framing on stateT connecting it to the region discipline
-let frame_stateT  (s:hs) (rw:rw) (h0:HyperStack.mem) (h1:HyperStack.mem) (mods:Set.set rid)
+let frame_stateT  (s:hs) (rw:rw) (h0:TLSMem.mem) (h1:TLSMem.mem) (mods:Set.set rid)
   : Lemma
     (requires
-      HH.modifies_just mods (HyperStack.HS?.h h0) (HyperStack.HS?.h h1) /\
-      Map.contains (HyperStack.HS?.h h0) s.region /\
+      HH.modifies_just mods (TLSMem.HS?.h h0) (TLSMem.HS?.h h1) /\
+      Map.contains (TLSMem.HS?.h h0) s.region /\
       not (Set.mem s.region mods))
     (ensures stateT s h0 = stateT s h1)
   = ()
 
 //This is probably the framing lemma that a client of this module will want to use
-let frame_iT  (s:hs) (rw:rw) (h0:HyperStack.mem) (h1:HyperStack.mem) (mods:Set.set rid)
+let frame_iT  (s:hs) (rw:rw) (h0:TLSMem.mem) (h1:TLSMem.mem) (mods:Set.set rid)
   : Lemma
     (requires
-      HH.modifies_just mods (HyperStack.HS?.h h0) (HyperStack.HS?.h h1) /\
-      Map.contains (HyperStack.HS?.h h0) s.region /\
+      HH.modifies_just mods (TLSMem.HS?.h h0) (TLSMem.HS?.h h1) /\
+      Map.contains (TLSMem.HS?.h h0) s.region /\
       not (Set.mem s.region mods))
     (ensures stateT s h0 = stateT s h1 /\ iT s rw h0 = iT s rw h1)
 =

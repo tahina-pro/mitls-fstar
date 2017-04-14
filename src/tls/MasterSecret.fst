@@ -1,14 +1,14 @@
 (* An experiment towards the PRF in KeySchedule, collapsing master and key derivation *)
 module MasterSecret (* : ST _ _ _ *)
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
 open TLSConstants
 open StreamAE
 open TLSInfo
 module AE = StreamAE
 module MM = MonotoneMap
 module MR = FStar.Monotonic.RRef
-module HH = FStar.HyperHeap
+module HH = TLSMem
 module N = Nonce
 module I = IdNonce
 

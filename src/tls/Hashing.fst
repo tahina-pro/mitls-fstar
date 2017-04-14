@@ -1,9 +1,9 @@
 ﻿(* Copyright (C) 2012--2015 Microsoft Research and INRIA *)
 module Hashing
 
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.HyperStack
+open TLSMem
+open TLSMem
+open TLSMem
 
 open Platform.Bytes
 include Hashing.Spec

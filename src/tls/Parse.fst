@@ -7,8 +7,8 @@ open Platform.Bytes
 open Platform.Error
 open TLSError
 
-module HH = FStar.HyperHeap
-module HS = FStar.HyperStack
+module HH = TLSMem
+module HS = TLSMem
 
 
 (** This file should be split in 3 different modules:

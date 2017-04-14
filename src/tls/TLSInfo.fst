@@ -20,7 +20,7 @@ open Cert
 
 module MM = MonotoneMap
 module MR = FStar.Monotonic.RRef
-module HH = FStar.HyperHeap
+module HH = TLSMem
 
 
 (**************** SPECIFYING SAFETY (GENERAL COMMENTS) **************

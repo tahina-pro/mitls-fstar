@@ -1,7 +1,7 @@
 module TestHandshake
 
 open FStar.Seq
-open FStar.HyperHeap
+open TLSMem
 open Platform.Bytes
 open Platform.Error
 open TLSError
