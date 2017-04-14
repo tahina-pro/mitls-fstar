@@ -175,8 +175,8 @@ let create (r:rgn) (n:random) =
 
 unfold let incr_pre #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h : GTot Type0 =
   let ctr = proj es in
-  let cur = m_sel h ctr in
-  cur + 1 < Seq.length (i_sel h (MkEpochs?.es es))
+  let cur = m_sel h ctr in // TODO: better name for m_sel (MR)    Mem should provide it, maybe eyecandy operator     h.[ctr]  (sel is more common than m_sel, so choose operators accordingly)
+  cur + 1 < Seq.length (i_sel h (MkEpochs?.es es)) // same as above (MS with invariant)
 
 unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h0 (_:unit) h1 : GTot Type0 =
   let ctr = proj es in
@@ -184,8 +184,9 @@ unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ct
   let newr = m_sel h1 ctr in
   let ctr_as_hsref = MR.as_hsref ctr in
   modifies_one r h0 h1 /\
-  HH.modifies_rref r !{HH.as_ref (MkRef?.ref ctr_as_hsref)} (HS.HS?.h h0) (HS.HS?.h h1) /\ 
+  HH.modifies_rref r !{HH.as_ref (MkRef?.ref ctr_as_hsref)} (HS.HS?.h h0) (HS.HS?.h h1) /\   // TODO: turn into sthg like Mem.modifies_ref  (TSet.singleton (ctr_as_hsref)) h0 h1   or even have a modifies specific to MR, but the latter would be easier with my general modifies framework!
   newr = oldr + 1
+// TODO: avoid uses of HS?.h or similar
 
 val add_epoch :
   #r:rgn -> #n:random -> es:epochs r n -> e:epoch r n ->
@@ -194,7 +195,7 @@ val add_epoch :
     (ensures fun h0 x h1 ->
         let es = MkEpochs?.es es in
         let es_as_hsref = MR.as_hsref es in
-        modifies_one r h0 h1 /\ modifies_rref r !{as_ref es_as_hsref} (HS.HS?.h h0) (HS.HS?.h h1) /\
+        modifies_one r h0 h1 /\ modifies_rref r !{as_ref es_as_hsref} (HS.HS?.h h0) (HS.HS?.h h1) /\ // TODO: same as above (modifies...)
         i_sel h1 es == Seq.snoc (i_sel h0 es) e)
 let add_epoch #r #n (MkEpochs es _ _) e = MS.i_write_at_end es e
 

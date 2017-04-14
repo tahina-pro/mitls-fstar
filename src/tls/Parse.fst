@@ -24,12 +24,15 @@ module HS = TLSMem
 
 (** Regions and colors for objects in memory *)
 let tls_color = -1
-let epoch_color = 1
-let hs_color = 2
+let epoch_color = 1 // TODO: positive, is now a stack region, is it intented?
+let hs_color = 2 // TODO: same
 
 let is_tls_rgn r   = HH.color r = tls_color
 let is_epoch_rgn r = HH.color r = epoch_color
 let is_hs_rgn r    = HH.color r = hs_color
+
+
+// TODO: move regions to Mem
 
 (*
  * AR: Adding the eternal region predicate.
