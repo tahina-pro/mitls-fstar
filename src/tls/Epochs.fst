@@ -131,8 +131,7 @@ val alloc_log_and_ctrs: #a:Type0 -> #p:(seq a -> Type0) -> r:rgn ->
   ST (is:MS.i_seq r a p & c1:epoch_ctr r is & c2:epoch_ctr r is)
     (requires (fun h -> p Seq.createEmpty))
     (ensures (fun h0 x h1 ->
-      modifies_one r h0 h1 /\ 
-      modifies_rref r !{} (HS.HS?.h h0) (HS.HS?.h h1) /\ 
+      TLSMem.hs_modifies_0 r h0 h1 /\
       (let (| is, c1, c2 |) = x in
       i_contains is h1 /\
       m_contains c1 h1 /\
@@ -155,9 +154,7 @@ val incr_epoch_ctr :
   ST unit
     (requires fun h -> 1 + m_sel h ctr < Seq.length (i_sel h is))
     (ensures (fun h0 _ h1 ->
-      let ctr_as_hsref = MR.as_hsref ctr in
-      modifies_one r h0 h1 /\
-      modifies_rref r !{as_ref ctr_as_hsref} (HS.HS?.h h0) (HS.HS?.h h1) /\
+      TLSMem.m_rref_modifies_1 r ctr h0 h1 /\
       m_sel h1 ctr = m_sel h0 ctr + 1))
 let incr_epoch_ctr #a #p #r #is ctr =
   m_recall ctr;
@@ -168,7 +165,7 @@ let incr_epoch_ctr #a #p #r #is ctr =
        
 val create: r:rgn -> n:random -> ST (epochs r n)
     (requires (fun h -> True))
-    (ensures (fun h0 x h1 -> modifies_one r h0 h1 /\ modifies_rref r !{} (HS.HS?.h h0) (HS.HS?.h h1)))
+    (ensures (fun h0 x h1 -> TLSMem.hs_modifies_0 r h0 h1))
 let create (r:rgn) (n:random) =
   let (| esref, c1, c2 |) = alloc_log_and_ctrs #(epoch r n) #(epochs_inv #r #n) r in
   MkEpochs esref c1 c2
@@ -182,11 +179,8 @@ unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ct
   let ctr = proj es in
   let oldr = m_sel h0 ctr in
   let newr = m_sel h1 ctr in
-  let ctr_as_hsref = MR.as_hsref ctr in
-  modifies_one r h0 h1 /\
-  HH.modifies_rref r !{HH.as_ref (MkRef?.ref ctr_as_hsref)} (HS.HS?.h h0) (HS.HS?.h h1) /\   // TODO: turn into sthg like Mem.modifies_ref  (TSet.singleton (ctr_as_hsref)) h0 h1   or even have a modifies specific to MR, but the latter would be easier with my general modifies framework!
+  TLSMem.m_rref_modifies_1 r ctr h0 h1 /\
   newr = oldr + 1
-// TODO: avoid uses of HS?.h or similar
 
 val add_epoch :
   #r:rgn -> #n:random -> es:epochs r n -> e:epoch r n ->
@@ -195,7 +189,7 @@ val add_epoch :
     (ensures fun h0 x h1 ->
         let es = MkEpochs?.es es in
         let es_as_hsref = MR.as_hsref es in
-        modifies_one r h0 h1 /\ modifies_rref r !{as_ref es_as_hsref} (HS.HS?.h h0) (HS.HS?.h h1) /\ // TODO: same as above (modifies...)
+        TLSMem.m_rref_modifies_1 r es h0 h1 /\
         i_sel h1 es == Seq.snoc (i_sel h0 es) e)
 let add_epoch #r #n (MkEpochs es _ _) e = MS.i_write_at_end es e
 

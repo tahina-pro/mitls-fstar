@@ -269,10 +269,10 @@ val decrypt: #i:id -> d:reader i -> l:plainLen -> c:cipher i l
     	 then res = Some (Entry?.p (Seq.index log j))
     	 else res = None))
        /\ (match res with
-         | None -> HH.modifies Set.empty h0.h h1.h
+         | None -> HH.hh_modifies Set.empty h0.h h1.h
          | _  ->
                 let ctr_counter_as_hsref = as_hsref (ctr d.counter) in
-                HH.modifies_one d.region h0.h h1.h /\
+                HH.hh_modifies_one d.region h0.h h1.h /\
                 modifies_rref d.region !{as_ref ctr_counter_as_hsref} h0.h h1.h
 	              /\ m_sel h1 (ctr d.counter) === j + 1)))
 

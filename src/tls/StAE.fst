@@ -243,7 +243,7 @@ let fragments' #i #rw s = fragments s
 (*------------------------------------------------------------------*)
 let genPost (#i:id) parent h0 (w:writer i) h1 =
   let r = region #i #Writer w in
-  HH.modifies Set.empty h0.h h1.h /\
+  HH.hh_modifies Set.empty h0.h h1.h /\
   HH.extends r parent /\
   stronger_fresh_region r h0 h1 /\
   color r = color parent /\
