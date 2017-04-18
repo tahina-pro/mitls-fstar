@@ -5,6 +5,7 @@ include FStar.HyperStack
 include FStar.ST
 include FStar.All
 
+module MS = FStar.Monotonic.Seq
 module MR = FStar.Monotonic.RRef
 module HH = FStar.HyperHeap
 module HS = FStar.HyperStack
@@ -31,6 +32,23 @@ let m_rref_modifies_1
   HS.modifies_one r h0 h1 /\
   HH.modifies_rref r !{HS.as_ref ctr_as_href} (HS.HS?.h h0) (HS.HS?.h h1)
 
+let op_Array_Access
+  (#r: MS.rid)
+  (#a:Type)
+  (#p: Seq.seq a -> Type)
+  (h:mem)
+  (m: MS.i_seq r a p)
+  : GTot (s: Seq.seq a {p s})
+= MS.i_sel h m
+
+let op_String_Access
+  (#r: MR.rid)
+  (#a:Type)
+  (#b: MR.reln a)
+  (h:mem)
+  (m: MR.m_rref r a b)
+: GTot a
+= MR.m_sel h m
 
 
 (* TODO:

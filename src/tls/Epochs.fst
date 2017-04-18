@@ -136,7 +136,7 @@ val alloc_log_and_ctrs: #a:Type0 -> #p:(seq a -> Type0) -> r:rgn ->
       i_contains is h1 /\
       m_contains c1 h1 /\
       m_contains c2 h1 /\ 
-      i_sel h1 is == Seq.createEmpty)))
+      h1.[is] == Seq.createEmpty)))
 let alloc_log_and_ctrs #a #p r =
   let init = Seq.createEmpty in
   let is = alloc_mref_iseq p r init in
@@ -152,10 +152,10 @@ val incr_epoch_ctr :
   #is:MS.i_seq r a p ->
   ctr:epoch_ctr r is ->
   ST unit
-    (requires fun h -> 1 + m_sel h ctr < Seq.length (i_sel h is))
+    (requires fun h -> 1 + h.[ctr] < Seq.length (h.(is)))
     (ensures (fun h0 _ h1 ->
       TLSMem.m_rref_modifies_1 r ctr h0 h1 /\
-      m_sel h1 ctr = m_sel h0 ctr + 1))
+      h1.[ctr] = h0.[ctr] + 1))
 let incr_epoch_ctr #a #p #r #is ctr =
   m_recall ctr;
   let cur = m_read ctr in
@@ -172,25 +172,24 @@ let create (r:rgn) (n:random) =
 
 unfold let incr_pre #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h : GTot Type0 =
   let ctr = proj es in
-  let cur = m_sel h ctr in // TODO: better name for m_sel (MR)    Mem should provide it, maybe eyecandy operator     h.[ctr]  (sel is more common than m_sel, so choose operators accordingly)
-  cur + 1 < Seq.length (i_sel h (MkEpochs?.es es)) // same as above (MS with invariant)
+  let cur = h.[ctr] in
+  cur + 1 < Seq.length (h.(MkEpochs?.es es))
 
 unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h0 (_:unit) h1 : GTot Type0 =
   let ctr = proj es in
-  let oldr = m_sel h0 ctr in
-  let newr = m_sel h1 ctr in
+  let oldr = h0.[ctr] in
+  let newr = h1.[ctr] in
   TLSMem.m_rref_modifies_1 r ctr h0 h1 /\
   newr = oldr + 1
 
 val add_epoch :
   #r:rgn -> #n:random -> es:epochs r n -> e:epoch r n ->
   ST unit
-    (requires fun h -> let is = MkEpochs?.es es in epochs_inv #r #n (Seq.snoc (i_sel h is) e))
+    (requires fun h -> let is = MkEpochs?.es es in epochs_inv #r #n (Seq.snoc (h.(is)) e))
     (ensures fun h0 x h1 ->
         let es = MkEpochs?.es es in
-        let es_as_hsref = MR.as_hsref es in
         TLSMem.m_rref_modifies_1 r es h0 h1 /\
-        i_sel h1 es == Seq.snoc (i_sel h0 es) e)
+        h1.(es) == Seq.snoc (h0.(es)) e)
 let add_epoch #r #n (MkEpochs es _ _) e = MS.i_write_at_end es e
 
 let incr_reader #r #n (es:epochs r n) : ST unit
@@ -212,15 +211,15 @@ let ctr (#r:_) (#n:_) (e:epochs r n) (rw:rw) = match rw with
   | Writer -> e.write
  
 val readerT: #rid:rgn -> #n:random -> e:epochs rid n -> mem -> GTot (epoch_ctr_inv rid (get_epochs e))
-let readerT #rid #n (MkEpochs es r w) (h:mem) = m_sel h r
+let readerT #rid #n (MkEpochs es r w) (h:mem) = h.[r]
 
 val writerT: #rid:rgn -> #n:random -> e:epochs rid n -> mem -> GTot (epoch_ctr_inv rid (get_epochs e))
-let writerT #rid #n (MkEpochs es r w) (h:mem) = m_sel h w
+let writerT #rid #n (MkEpochs es r w) (h:mem) = h.[w]
 
 unfold let get_ctr_post (#r:rgn) (#n:random) (es:epochs r n) (rw:rw) h0 (i:int) h1 = 
   let epochs = MkEpochs?.es es in
   h0 == h1 /\ 
-  i = m_sel h1 (ctr es rw) /\ 
+  i = h1.[(ctr es rw)] /\ 
   -1 <= i /\ 
   MS.int_at_most i epochs h1
 
@@ -235,7 +234,7 @@ let get_ctr (#r:rgn) (#n:random) (es:epochs r n) (rw:rw)
 let get_reader (#r:rgn) (#n:random) (es:epochs r n) = get_ctr es Reader
 let get_writer (#r:rgn) (#n:random) (es:epochs r n) = get_ctr es Writer
 
-let epochsT #r #n (es:epochs r n) (h:mem) = MS.i_sel h (MkEpochs?.es es)
+let epochsT #r #n (es:epochs r n) (h:mem) = h.(MkEpochs?.es es)
 
 let get_current_epoch
   (#r:_)
@@ -243,10 +242,10 @@ let get_current_epoch
   (e:epochs r n)
   (rw:rw)
   : ST (epoch r n)
-       (requires (fun h -> 0 <= m_sel h (ctr e rw)))
+       (requires (fun h -> 0 <= h.[(ctr e rw)]))
        (ensures (fun h0 rd h1 -> 
-           let j = m_sel h1 (ctr e rw) in
-           let epochs = MS.i_sel h1 e.es in
+           let j = h1.[(ctr e rw)] in
+           let epochs = h1.(e.es) in
            h0==h1 /\
            Seq.indexable epochs j /\
            rd == Seq.index epochs j))
