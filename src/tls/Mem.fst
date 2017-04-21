@@ -3,6 +3,7 @@ module Mem
 module HH = FStar.HyperHeap
 module HS = FStar.HyperStack
 module MR = FStar.Monotonic.RRef
+module MS = FStar.Monotonic.Seq
 
 abstract
 noeq
@@ -19,15 +20,25 @@ type loc =
     (contents: MR.m_rref r a b) ->
     loc
   )
+| LocISeq: (
+    (r: MS.rid) ->
+    (a: Type) ->
+    (p: (Seq.seq a -> Type)) ->
+    (contents: MS.i_seq r a p) ->
+    loc
+  )
 
 abstract
 let is_ref (l: loc): GTot bool = LocRef? l
+
+let guarded (t: Type) (p: (t -> Type)) : Tot Type = (x: t {p x})
 
 abstract
 let loc_type (l: loc) : GTot Type =
   match l with
   | LocRef a _ -> a
   | LocMRef _ a _ _ -> a
+  | LocISeq _ a p _ -> guarded (Seq.seq a) p
 
 abstract
 let loc_ref (l: loc { is_ref l } ) : GTot (HS.reference (loc_type l)) = LocRef?.contents l
@@ -35,15 +46,21 @@ let loc_ref (l: loc { is_ref l } ) : GTot (HS.reference (loc_type l)) = LocRef?.
 abstract
 let is_mref (l: loc): GTot bool = LocMRef? l
 
+abstract
+let is_iseq (l: loc): GTot bool = LocISeq? l
+
 // abstract // this is not possible, unification issues
 let loc_region_type (l: loc) : GTot Type =
-  if is_mref l then MR.rid else HH.rid
+  if is_iseq l then MS.rid else
+  if is_mref l then MR.rid else
+  HH.rid
 
 abstract
 let loc_region (l: loc): GTot (loc_region_type l) =
   match l with
   | LocRef _ r -> HS.frameOf r
   | LocMRef r _ _ _ -> r
+  | LocISeq r _ _ _ -> r
 
 abstract
 let loc_reln (l: loc { is_mref l }) : GTot (MR.reln (loc_type l)) =
@@ -57,7 +74,12 @@ abstract
 let loc_is_at_most_one
   (l: loc)
 : Lemma
-  ((if is_ref l then 1 else 0) + (if is_mref l then 1 else 0) <= 1)
+  (ensures (
+    (if is_ref l then 1 else 0) +
+    (if is_mref l then 1 else 0) +
+    (if is_iseq l then 1 else 0) <=
+    1
+  ))
 = ()
 
 abstract
@@ -68,6 +90,12 @@ let is_mref_inj
   (requires (loc_region l1 === loc_region l2 /\ loc_type l1 == loc_type l2 /\ loc_reln l1 === loc_reln l2 /\ loc_mref l1 === loc_mref l2))
   (ensures (l1 == l2))
 = ()
+
+abstract
+let loc_iseq_type
+  (l: loc {is_iseq l})
+: GTot Type
+= LocISeq?.a l
 
 let ref
   (a: Type)
@@ -80,6 +108,40 @@ let mref
   (b: MR.reln a)
 : Tot Type
 = (l: loc { is_mref l /\ loc_type l == a /\ loc_region l == r /\ loc_reln l == b } )
+
+let loc_invar
+  (l: loc { is_iseq l } )
+: GTot (Seq.seq (loc_iseq_type l) -> Type)
+= LocISeq?.p l
+
+let seq_refines_eq_intro
+  (a1: Type)
+  (a2: Type)
+  (p1: (Seq.seq a1 -> Type))
+  (p2: (Seq.seq a2 -> Type))
+  (q1: squash (a1 == a2))
+  (q2: squash (p1 == p2))
+: Lemma
+  (ensures ((s: Seq.seq a1 {p1 s}) == (s: Seq.seq a2 {p2 s})))
+= ()
+
+abstract
+let is_iseq_loc_type
+  (l: loc {is_iseq l})
+: Lemma
+  (loc_type l == (s: Seq.seq (loc_iseq_type l) {loc_invar l s}))
+= let (LocISeq r a p contents) = l in
+  let u : squash (loc_iseq_type l == a) = () in
+  let v : squash (loc_invar l == p) = () in
+  assert_norm (loc_type (LocISeq r a p contents) == (s: Seq.seq a {p s}));
+  seq_refines_eq_intro (loc_iseq_type l) a (loc_invar l) p u v
+
+let iseq
+  (r: MS.rid)
+  (a: Type)
+  (p: (Seq.seq a -> Type))
+: Tot Type
+= (l: (l: loc { is_iseq l } ) { loc_iseq_type l == a /\ loc_region l == r /\ loc_invar l == p } )
 
 abstract
 let ref_of_reference
@@ -128,6 +190,44 @@ let m_rref_of_mref
 = loc_mref mr 
 
 abstract
+let iseq_of_i_seq
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (ms: MS.i_seq r a p)
+: GTot (iseq r a p)
+= LocISeq r a p ms
+
+abstract
+let i_seq_of_iseq
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (ms: iseq r a p)
+: GTot (MS.i_seq r a p)
+= LocISeq?.contents ms
+
+let hetero_id
+  (to: Type)
+  (#from: Type)
+  (x: from)
+  (q: squash (from == to))
+: Pure to
+  (requires True)
+  (ensures (fun y -> y == x /\ x == y))
+= x
+
+let hetero_id'
+  (to: Type)
+  (#from: Type)
+  (x: from)
+  (q: squash (to == from))
+: Pure to
+  (requires True)
+  (ensures (fun y -> y == x /\ x == y))
+= x
+
+abstract
 let sel
   (h: HS.mem)
   (l: loc)
@@ -135,6 +235,8 @@ let sel
 = match l with
   | LocRef _ rr -> HS.sel h rr
   | LocMRef _ _ _ rr -> MR.m_sel h rr
+  | LocISeq r a p rr ->
+    let x : guarded (Seq.seq a) p = MS.i_sel h rr in x
 
 abstract
 let upd
@@ -145,6 +247,9 @@ let upd
 = match l with
   | LocRef _ rr -> HS.upd h rr x
   | LocMRef _ _ _ rr -> HS.upd h (MR.as_hsref rr) x
+  | LocISeq r a p rr ->
+    let x : guarded (Seq.seq a) p = x in
+    HS.upd h (MR.as_hsref rr) x
 
 abstract
 let as_reference
@@ -153,6 +258,11 @@ let as_reference
 = match l with
   | LocRef _ rr -> rr
   | LocMRef _ _ _ rr -> MR.as_hsref rr
+  | LocISeq r a p rr -> 
+    let (x : HS.ref (s: Seq.seq a {p s}) { x.HS.id = r}) = MR.as_hsref rr in
+    let (y: HS.reference (s: Seq.seq a {p s})) = x in
+    assert_norm (guarded (Seq.seq a) p == (s: Seq.seq a {p s}));
+    hetero_id (HS.reference (guarded (Seq.seq a) p)) y ()
 
 assume val filter
   (r: HH.rid)
