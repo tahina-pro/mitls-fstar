@@ -5,6 +5,8 @@ module HS = FStar.HyperStack
 module MR = FStar.Monotonic.RRef
 module MS = FStar.Monotonic.Seq
 
+let mem = HS.mem
+
 abstract
 noeq
 type loc =
@@ -49,11 +51,15 @@ let is_mref (l: loc): GTot bool = LocMRef? l
 abstract
 let is_iseq (l: loc): GTot bool = LocISeq? l
 
+let rid = HH.rid
+let mr_rid = MR.rid
+let ms_rid = MS.rid
+
 // abstract // this is not possible, unification issues
 let loc_region_type (l: loc) : GTot Type =
-  if is_iseq l then MS.rid else
-  if is_mref l then MR.rid else
-  HH.rid
+  if is_iseq l then ms_rid else
+  if is_mref l then mr_rid else
+  rid
 
 abstract
 let loc_region (l: loc): GTot (loc_region_type l) =
@@ -62,8 +68,10 @@ let loc_region (l: loc): GTot (loc_region_type l) =
   | LocMRef r _ _ _ -> r
   | LocISeq r _ _ _ -> r
 
+let reln = MR.reln
+
 abstract
-let loc_reln (l: loc { is_mref l }) : GTot (MR.reln (loc_type l)) =
+let loc_reln (l: loc { is_mref l }) : GTot (reln (loc_type l)) =
   LocMRef?.b l
 
 abstract
@@ -229,7 +237,7 @@ let hetero_id'
 
 abstract
 let sel
-  (h: HS.mem)
+  (h: mem)
   (l: loc)
 : GTot (loc_type l)
 = match l with
@@ -238,18 +246,7 @@ let sel
   | LocISeq r a p rr ->
     let x : guarded (Seq.seq a) p = MS.i_sel h rr in x
 
-abstract
-let upd
-  (h: HS.mem)
-  (l: loc { HS.live_region h (loc_region l) } )
-  (x: loc_type l)
-: GTot HS.mem
-= match l with
-  | LocRef _ rr -> HS.upd h rr x
-  | LocMRef _ _ _ rr -> HS.upd h (MR.as_hsref rr) x
-  | LocISeq r a p rr ->
-    let x : guarded (Seq.seq a) p = x in
-    HS.upd h (MR.as_hsref rr) x
+let live_region = HS.live_region
 
 abstract
 let as_reference
@@ -264,8 +261,86 @@ let as_reference
     assert_norm (guarded (Seq.seq a) p == (s: Seq.seq a {p s}));
     hetero_id (HS.reference (guarded (Seq.seq a) p)) y ()
 
+private
+let loc_region_iseq
+  r a p x
+: Lemma
+  ((as_reference (LocISeq r a p x)).HS.id == loc_region (LocISeq r a p x))
+  [SMTPatOr [
+    [SMTPat (as_reference (LocISeq r a p x)).HS.id];
+    [SMTPat (loc_region (LocISeq r a p x))];
+  ]]
+= assert ((MR.as_hsref x).HS.id == r) // TODO: WHY WHY WHY not automatic?
+
+abstract
+let upd
+  (h: mem)
+  (l: loc { live_region h (loc_region l) } )
+  (x: loc_type l)
+: GTot mem
+= match l with
+  | LocRef _ rr -> HS.upd h rr x
+  | LocMRef _ _ _ rr -> HS.upd h (MR.as_hsref rr) x
+  | LocISeq r a p rr ->
+    let x : guarded (Seq.seq a) p = x in
+    HS.upd h (MR.as_hsref rr) x
+
+private
+let upd_iseq
+  (h: mem)
+  (r: MS.rid) a p rr
+  (x: guarded (Seq.seq a) p)
+: Lemma
+  (requires (live_region h r))
+  (ensures (live_region h r /\ upd h (LocISeq r a p rr) x == HS.upd h (MR.as_hsref rr) x))
+  [SMTPat (upd h (LocISeq r a p rr))]
+= assert_norm (upd h (LocISeq r a p rr) x == HS.upd h (MR.as_hsref rr) x)
+
+let sel_upd
+  (h: mem)
+  (l: loc { live_region h (loc_region l) })
+  (x: loc_type l)
+: Lemma
+  (sel (upd h l x) l == x)
+  [SMTPat (sel (upd h l x) l)]
+= ()
+
+let modifies_regions
+  (rs: Set.set rid)
+  (h0 h1: mem)
+: GTot Type0
+= HS.modifies rs h0 h1
+
+let modifies_regions_refl
+  (rs: Set.set rid)
+  (h: mem)
+: Lemma
+  (modifies_regions rs h h)
+= ()
+
+let modifies_regions_trans
+  (rs12 rs23: Set.set rid)
+  (h1 h2 h3: mem)
+: Lemma
+  (requires (
+    modifies_regions rs12 h1 h2 /\
+    modifies_regions rs23 h2 h3
+  ))
+  (ensures (
+    modifies_regions (Set.union rs12 rs23) h1 h3
+  ))
+= ()
+
+let modifies_regions_subset
+  (rs rs': Set.set rid)
+  (h h' : mem)
+: Lemma
+  (requires (Set.subset rs rs' /\ modifies_regions rs h h'))
+  (ensures (modifies_regions rs' h h'))
+= ()
+
 assume val filter
-  (r: HH.rid)
+  (r: rid)
   (ls: TSet.set loc)
 : GTot (TSet.set Heap.aref)
 
@@ -290,46 +365,287 @@ let filter_union
   [SMTPat (filter r (TSet.union ls1 ls2))]
 = TSet.lemma_equal_elim (filter r (TSet.union ls1 ls2)) (TSet.union (filter r ls1) (filter r ls2))
 
-let modifies
-  (rs: Set.set HH.rid)
-  (ls: TSet.set loc {forall (l: loc {TSet.mem l ls}) . Set.mem (loc_region l) rs})
-  (h0 h1: HS.mem)
-: GTot Type0
-= HS.modifies rs h0 h1 /\ (
-    forall (r: HH.rid { Map.contains h0.HS.h r } ) .
-    HH.modifies_rref r (filter r ls) h0.HS.h h1.HS.h
-  )
-
-let modifies_refl
-  (rs: Set.set HH.rid)
-  (ls: TSet.set loc {forall (l: loc {TSet.mem l ls}) . Set.mem (loc_region l) rs})
-  (h: HS.mem)
+let filter_empty
+  (r: HH.rid)
 : Lemma
-  (modifies rs ls h h)
+  (filter r TSet.empty == TSet.empty)
+  [SMTPat (filter r TSet.empty)]
+= TSet.lemma_equal_elim (filter r TSet.empty) TSet.empty
+
+let filter_singleton_same
+  (r: HH.rid)
+  (l: loc)
+: Lemma
+  (requires (r = (loc_region l <: HH.rid)))
+  (ensures (filter r (TSet.singleton l) == TSet.singleton (HS.as_aref (as_reference l))))
+  [SMTPat (filter r (TSet.singleton l))]
+= TSet.lemma_equal_elim (filter r (TSet.singleton l)) (TSet.singleton (HS.as_aref (as_reference l)))
+
+let filter_singleton_other
+  (r: HH.rid)
+  (l: loc)
+: Lemma
+  (requires (r <> (loc_region l <: HH.rid)))
+  (ensures (filter r (TSet.singleton l) == TSet.empty))
+  [SMTPat (filter r (TSet.singleton l))]
+= TSet.lemma_equal_elim (filter r (TSet.singleton l)) TSet.empty
+
+let modifies_locs_in_region
+  (r: HH.rid)
+  (ls: TSet.set loc {forall (l: loc {TSet.mem l ls}) . r == loc_region l})
+  (h0 h1: mem)
+: GTot Type0
+= HH.modifies_rref r (filter r ls) h0.HS.h h1.HS.h
+
+let modifies_locs_in_region_refl
+  (r: HH.rid)
+  (ls: TSet.set loc {forall (l: loc {TSet.mem l ls}) . r == loc_region l})
+  (h: mem)
+: Lemma
+  (modifies_locs_in_region r ls h h)
 = ()
 
-let modifies_trans
-  (rs12 rs23: Set.set HH.rid)
-  (ls12: TSet.set loc {(forall (l: loc {TSet.mem l ls12}) . Set.mem (loc_region l) rs12)})
-  (ls23: TSet.set loc {(forall (l: loc {TSet.mem l ls23}) . Set.mem (loc_region l) rs23)})
-  (h1 h2 h3: HS.mem)
+let modifies_locs_in_region_trans
+  (r: HH.rid)
+  (ls12: TSet.set loc {(forall (l: loc {TSet.mem l ls12}) . r == loc_region l)})
+  (ls23: TSet.set loc {(forall (l: loc {TSet.mem l ls23}) . r == loc_region l)})
+  (h1 h2 h3: mem)
 : Lemma
   (requires (
-    modifies rs12 ls12 h1 h2 /\
-    modifies rs23 ls23 h2 h3
+    modifies_locs_in_region r ls12 h1 h2 /\
+    modifies_locs_in_region r ls23 h2 h3
   ))
   (ensures (
-    modifies (Set.union rs12 rs23) (TSet.union ls12 ls23) h1 h3
+    modifies_locs_in_region r (TSet.union ls12 ls23) h1 h3
   ))
 = ()
 
-let modifies_subset
-  (rs rs': Set.set HH.rid)
-  (ls: TSet.set loc {(forall (l: loc {TSet.mem l ls}) . Set.mem (loc_region l) rs)})
-  (ls': TSet.set loc {(forall (l: loc {TSet.mem l ls'}) . Set.mem (loc_region l) rs')})
-  (h h' : HS.mem)
+let modifies_locs_in_region_subset
+  (r: HH.rid)
+  (ls: TSet.set loc {(forall (l: loc {TSet.mem l ls}) . r == loc_region l)})
+  (ls': TSet.set loc {(forall (l: loc {TSet.mem l ls'}) . r == loc_region l)})
+  (h h' : mem)
 : Lemma
-  (requires (Set.subset rs rs' /\ TSet.subset ls ls' /\ modifies rs ls h h'))
-  (ensures (modifies rs' ls' h h'))
+  (requires (TSet.subset ls ls' /\ modifies_locs_in_region r ls h h'))
+  (ensures (modifies_locs_in_region r ls' h h'))
 = ()
 
+let modifies_regions_modifies_locs_in_region
+  (r: HH.rid)
+  (rs: Set.set HH.rid)
+  (h h' : mem)
+: Lemma
+  (requires ((~ (Set.mem r rs)) /\ modifies_regions rs h h' /\ live_region h r))
+  (ensures (modifies_locs_in_region r TSet.empty h h'))
+= ()
+
+abstract
+let contains
+  (m: mem)
+  (l: loc)
+: Tot Type0
+= HS.contains m (as_reference l)
+
+let loc_diff
+  (l1 l2: loc)
+: GTot Type0
+= ~ (HS.as_aref (as_reference l1) == HS.as_aref (as_reference l2))
+
+let loc_diff_irrefl
+  (l: loc)
+: Lemma
+  (~ (loc_diff l l))
+= ()
+
+let loc_diff_sym
+  (l1 l2: loc)
+: Lemma
+  (requires (loc_diff l1 l2))
+  (ensures (loc_diff l2 l1))
+= ()
+
+let modifies_locs_in_region_sel
+  (r: HH.rid)
+  (ls: TSet.set loc {(forall (l: loc {TSet.mem l ls}) . r == loc_region l)})
+  (h h': mem)
+  (l: loc)
+: Lemma
+  (requires (modifies_locs_in_region r ls h h' /\ contains h l /\ r == loc_region l /\ (
+    forall (l' : loc { TSet.mem l' ls } ) .
+    loc_diff l l'
+  )))
+  (ensures (sel h' l == sel h l))
+= assert (forall
+    (l': loc)
+    . (
+      TSet.mem l' ls /\
+      r == loc_region l' /\
+      HS.as_aref (as_reference l) == HS.as_aref (as_reference l')
+    ) ==>
+    loc_diff l l'
+  ) // TODO: WHY WHY WHY not automatic?
+
+unfold
+let upd_post
+  (h0: mem)
+  (r: loc { live_region h0 (loc_region r) } )
+  (v: loc_type r)
+: GTot Type0
+= modifies_regions (Set.singleton (loc_region r)) h0 (upd h0 r v) /\
+  modifies_locs_in_region (loc_region r) (TSet.singleton r) h0 (upd h0 r v)
+
+let upd_post_intro
+  (h0: mem)
+  (r: loc { live_region h0 (loc_region r) } )
+  (v: loc_type r)
+: Lemma (upd_post h0 r v)
+  [SMTPat (upd h0 r v)]
+= ()
+
+abstract
+let loc_mm
+  (l: loc)
+: GTot bool
+= (as_reference l).HS.mm
+
+let mref_not_mm
+  (#r: MR.rid)
+  (#a: Type)
+  (#b: MR.reln a)
+  (m: mref r a b)
+: Lemma
+  (~ (loc_mm m))
+= ()
+
+let is_eternal_region = HS.is_eternal_region
+
+abstract
+let recall
+  (l: loc)
+: Stack unit
+  (requires (fun _ -> (is_eternal_region (loc_region l) /\ (~ (loc_mm l)))))
+  (ensures (fun m0 _ m1 -> m0 == m1 /\ m1 `contains` l))
+= match l with
+  | LocRef a r -> ST.recall r
+  | LocMRef _ _ _ r -> MR.m_recall r
+  | LocISeq _ _ _ r -> MR.m_recall r
+
+(* Accessors *)
+
+abstract
+let weak_contains
+  (m: mem)
+  (l: loc)
+: GTot Type0
+= HS.weak_contains m (as_reference l)
+
+unfold let read_post (r: loc) (m0: mem) (x: loc_type r) (m1: mem) =
+  m1==m0 /\ x==sel m0 r
+
+let weak_live_region = HS.weak_live_region
+
+let weak_live_region_not_mm_weak_contains
+  (m: mem)
+  (l: loc)
+: Lemma
+  (requires (weak_live_region m (loc_region l) /\ (~ (loc_mm l))))
+  (ensures (weak_contains m l))
+= ()
+
+let weak_contains_mref
+  (#r: MR.rid)
+  (#a: Type)
+  (#b: MR.reln a)
+  (m: mref r a b)
+  (h: mem)
+: Lemma
+  (weak_contains h m)
+  [SMTPat (weak_contains h m)]
+= ()
+
+abstract
+let read
+  (l: loc)
+: ST (loc_type l)
+  (requires (fun h -> weak_contains h l))
+  (ensures (fun m0 x m1 -> read_post l m0 x m1))
+= match l with
+  | LocRef a r -> !r
+  | LocMRef _ _ _ r -> MR.m_read r
+  | LocISeq i a p r ->
+    let x : guarded (Seq.seq a) p = MS.i_read r in
+    x
+
+abstract
+let write_pre
+  (h0: mem)
+  (l: loc)
+  (v: loc_type l)
+: GTot Type0
+= match l with
+  | LocRef _ _ -> True
+  | LocMRef _ _ b r -> b (sel h0 l) v
+  | LocISeq _ _ _ _ -> False
+
+let ref_write_pre
+  (#a: Type)
+  (h0: mem)
+  (r: ref a)
+  (v: a)
+: Lemma
+  (write_pre h0 r v)
+  [SMTPat (write_pre h0 r v)]
+= ()
+
+let mref_write_pre
+  (#r: MR.rid)
+  (#a: Type)
+  (#b: MR.reln a)
+  (h0: mem)
+  (m: mref r a b)
+  (v: a)
+: Lemma
+  (requires (b (sel h0 m) v))
+  (ensures (write_pre h0 m v))
+  [SMTPat (write_pre h0 m v)]
+= ()
+
+let contains_live_region
+  (m0: mem)
+  (l: loc)
+: Lemma
+  (requires (m0 `contains` l))
+  (ensures (live_region m0 (loc_region l)))
+  [SMTPat (live_region m0 (loc_region l))]
+= ()
+
+unfold let write_post (r:loc) (v:loc_type r) m0 (_u:unit) m1 =
+  m0 `contains` r /\ m1 == upd m0 r v
+
+abstract
+let write
+  (l: loc)
+  (v: loc_type l)
+: ST unit
+  (requires (fun h0 -> h0 `contains` l /\ write_pre h0 l v))
+  (ensures (write_post l v))
+= match l with
+  | LocRef _ r -> r := v
+  | LocMRef _ _ _ r -> MR.m_write r v
+
+(*
+// TODO: specify i_write_at_end using assign_post
+abstract
+let write_at_end
+  (#rgn: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (r: iseq rgn a p)
+  (x: a)
+: ST unit
+  (requires (fun h -> let w : guarded (Seq.seq a) p = sel h r in p (Seq.snoc w x)))
+  (ensures (fun h0 _ h1 -> let w : guarded (Seq.seq a) p = sel h0 r in p (Seq.snoc w x) /\ h1 == upd h0 r (Seq.snoc w x)))
+= recall r;
+  let w : guarded (Seq.seq a) p = read r in
+  MR.m_write (LocISeq?.contents r) (Seq.snoc w x)
+*)
