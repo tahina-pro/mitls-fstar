@@ -151,6 +151,16 @@ let iseq
 : Tot Type
 = (l: (l: loc { is_iseq l } ) { loc_iseq_type l == a /\ loc_region l == r /\ loc_invar l == p } )
 
+let loc_type_iseq
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (x: iseq r a p)
+: Lemma
+  (loc_type x == guarded (Seq.seq a) p)
+  [SMTPat (loc_type x)]
+= ()
+
 abstract
 let ref_of_reference
   (#a: Type)
@@ -446,6 +456,18 @@ let contains
 : Tot Type0
 = HS.contains m (as_reference l)
 
+let contains_live_region
+  (l: loc)
+  h
+: Lemma
+  (requires (contains h l))
+  (ensures (live_region h (loc_region l)))
+  [SMTPatOr [
+    [SMTPat (contains h l)];
+    [SMTPat (live_region h (loc_region l))];
+  ]]
+= ()
+
 let loc_diff
   (l1 l2: loc)
 : GTot Type0
@@ -633,8 +655,41 @@ let write
   | LocRef _ r -> r := v
   | LocMRef _ _ _ r -> MR.m_write r v
 
-(*
-// TODO: specify i_write_at_end using assign_post
+let get = ST.get
+
+unfold
+let write_at_end_pre
+  (#rgn: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (r: iseq rgn a p)
+  (x: a)
+  (h: mem)
+: Tot Type0
+= let w : loc_type r = sel h r in
+  let w = hetero_id (guarded (Seq.seq a) p) w () in
+  p (Seq.snoc w x)
+
+unfold
+let write_at_end_post
+  (#rgn: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (r: iseq rgn a p)
+  (x: a)
+  (h0: mem)
+  (_: unit)
+  (h1: mem)
+: Tot Type0
+= h0 `contains` r /\ (
+    let w : loc_type r = sel h0 r in
+    let w = hetero_id (guarded (Seq.seq a) p) w () in
+    p (Seq.snoc w x) /\ (
+      let s : guarded (Seq.seq a) p = Seq.snoc w x in
+      let s = hetero_id (loc_type r) s () in
+      h1 == upd h0 r s
+  ))
+
 abstract
 let write_at_end
   (#rgn: MS.rid)
@@ -643,9 +698,12 @@ let write_at_end
   (r: iseq rgn a p)
   (x: a)
 : ST unit
-  (requires (fun h -> let w : guarded (Seq.seq a) p = sel h r in p (Seq.snoc w x)))
-  (ensures (fun h0 _ h1 -> let w : guarded (Seq.seq a) p = sel h0 r in p (Seq.snoc w x) /\ h1 == upd h0 r (Seq.snoc w x)))
+  (requires (write_at_end_pre r x))
+  (ensures (write_at_end_post r x))
 = recall r;
   let w : guarded (Seq.seq a) p = read r in
-  MR.m_write (LocISeq?.contents r) (Seq.snoc w x)
-*)
+  let s : guarded (Seq.seq a) p = Seq.snoc w x in
+  let rr = LocISeq?.contents r in
+  let h0 = get () in
+  assert (h0 `HS.contains` (MR.as_hsref rr));
+  MR.m_write rr s
