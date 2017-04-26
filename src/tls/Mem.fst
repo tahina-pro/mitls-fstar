@@ -70,9 +70,33 @@ let loc_region (l: loc): GTot (loc_region_type l) =
 
 let reln = MR.reln
 
+let grows (#a: Type) (#p: (Seq.seq a -> Type)) (s1 s2: guarded (Seq.seq a) p) = MS.grows (s1 <: Seq.seq a) (s2 <: Seq.seq a)
+
+let hetero_id
+  (to: Type)
+  (#from: Type)
+  (x: from)
+  (q: squash (from == to))
+: Pure to
+  (requires True)
+  (ensures (fun y -> y == x /\ x == y))
+= x
+
+let hetero_id'
+  (to: Type)
+  (#from: Type)
+  (x: from)
+  (q: squash (to == from))
+: Pure to
+  (requires True)
+  (ensures (fun y -> y == x /\ x == y))
+= x
+
 abstract
-let loc_reln (l: loc { is_mref l }) : GTot (reln (loc_type l)) =
-  LocMRef?.b l
+let loc_reln (l: loc { is_mref l \/ is_iseq l }) : GTot (reln (loc_type l)) =
+  match l with
+  | LocMRef _ _ b _ -> b
+  | LocISeq _ a p _ -> grows #a #p
 
 abstract
 let loc_mref (l: loc { is_mref l }) : GTot (MR.m_rref (loc_region l) (loc_type l) (loc_reln l)) =
@@ -122,28 +146,6 @@ let loc_invar
 : GTot (Seq.seq (loc_iseq_type l) -> Type)
 = LocISeq?.p l
 
-let seq_refines_eq_intro
-  (a1: Type)
-  (a2: Type)
-  (p1: (Seq.seq a1 -> Type))
-  (p2: (Seq.seq a2 -> Type))
-  (q1: squash (a1 == a2))
-  (q2: squash (p1 == p2))
-: Lemma
-  (ensures ((s: Seq.seq a1 {p1 s}) == (s: Seq.seq a2 {p2 s})))
-= ()
-
-abstract
-let is_iseq_loc_type
-  (l: loc {is_iseq l})
-: Lemma
-  (loc_type l == (s: Seq.seq (loc_iseq_type l) {loc_invar l s}))
-= let (LocISeq r a p contents) = l in
-  let u : squash (loc_iseq_type l == a) = () in
-  let v : squash (loc_invar l == p) = () in
-  assert_norm (loc_type (LocISeq r a p contents) == (s: Seq.seq a {p s}));
-  seq_refines_eq_intro (loc_iseq_type l) a (loc_invar l) p u v
-
 let iseq
   (r: MS.rid)
   (a: Type)
@@ -159,6 +161,16 @@ let loc_type_iseq
 : Lemma
   (loc_type x == guarded (Seq.seq a) p)
   [SMTPat (loc_type x)]
+= ()
+
+let loc_reln_iseq
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (x: iseq r a p)
+: Lemma
+  (loc_reln x == grows #a #p)
+  [SMTPat (loc_reln x)]
 = ()
 
 abstract
@@ -225,26 +237,6 @@ let i_seq_of_iseq
 : GTot (MS.i_seq r a p)
 = LocISeq?.contents ms
 
-let hetero_id
-  (to: Type)
-  (#from: Type)
-  (x: from)
-  (q: squash (from == to))
-: Pure to
-  (requires True)
-  (ensures (fun y -> y == x /\ x == y))
-= x
-
-let hetero_id'
-  (to: Type)
-  (#from: Type)
-  (x: from)
-  (q: squash (to == from))
-: Pure to
-  (requires True)
-  (ensures (fun y -> y == x /\ x == y))
-= x
-
 abstract
 let sel
   (h: mem)
@@ -255,8 +247,6 @@ let sel
   | LocMRef _ _ _ rr -> MR.m_sel h rr
   | LocISeq r a p rr ->
     let x : guarded (Seq.seq a) p = MS.i_sel h rr in x
-
-let live_region = HS.live_region
 
 abstract
 let as_reference
@@ -281,6 +271,8 @@ let loc_region_iseq
     [SMTPat (loc_region (LocISeq r a p x))];
   ]]
 = assert ((MR.as_hsref x).HS.id == r) // TODO: WHY WHY WHY not automatic?
+
+let live_region = HS.live_region
 
 abstract
 let upd
@@ -707,3 +699,82 @@ let write_at_end
   let h0 = get () in
   assert (h0 `HS.contains` (MR.as_hsref rr));
   MR.m_write rr s
+
+let int_at_most #r #a #p (x:int) (is:iseq r a p) (h:mem) : Type0 =
+  let s : guarded (Seq.seq a) p = sel h is in
+  let s : Seq.seq a = s in
+  x < Seq.length s
+
+private
+let int_at_most_equiv #r #a #p (x:int) (is:iseq r a p) (h:mem)
+: Lemma
+  (int_at_most x is h <==> MS.int_at_most x (LocISeq?.contents is) h)
+  [SMTPat (int_at_most x is h)]
+= ()
+
+unfold let stable_on_t
+  (l: loc { is_mref l \/ is_iseq l } )
+  (p: (mem -> GTot Type0))
+= forall h0 h1 . p h0 /\ loc_reln l (sel h0 l) (sel h1 l) ==> p h1
+
+#reset-options "--z3rlimit 32"
+
+private
+let i_sel_eq
+  (#r: ms_rid) (#a: Type) (#p: (Seq.seq a -> Type)) (rr:MS.i_seq r a p)
+  (h0: mem)
+: Lemma
+  (MS.i_sel h0 rr == MR.m_sel h0 rr)
+= ()
+
+private
+let sel_iseq_i_sel
+  (#r: ms_rid) (#a: Type) (#p: (Seq.seq a -> Type)) (is:iseq r a p)
+  (h0: mem)
+  : Lemma
+  (((sel h0 is <: guarded (Seq.seq a) p) <: Seq.seq a) == MS.i_sel h0 (LocISeq?.contents is))
+= ()
+
+private
+let sel_iseq_m_sel
+  (#r: ms_rid) (#a: Type) (#p: (Seq.seq a -> Type)) (is:iseq r a p)
+  (h0: mem)
+  : Lemma
+  (((sel h0 is <: guarded (Seq.seq a) p) <: Seq.seq a) == MR.m_sel h0 (LocISeq?.contents is))
+= i_sel_eq (LocISeq?.contents is) h0; sel_iseq_i_sel is h0
+
+private
+let stable_on_t_iseq
+  (#r: ms_rid) (#a: Type) (#p: (Seq.seq a -> Type)) (is:iseq r a p)
+  (p': (mem -> GTot Type0))
+: Lemma
+  (stable_on_t is p' <==> MR.stable_on_t (LocISeq?.contents is) p')
+= loc_type_iseq is;
+  let f
+    (h0 h1: mem)
+  : Lemma
+    (requires (stable_on_t is p' /\ p' h0 /\ MS.grows (MR.m_sel h0 (LocISeq?.contents is)) (MR.m_sel h1 (LocISeq?.contents is))))
+    (ensures (p' h1))
+  = 
+    sel_iseq_m_sel is h0;
+    sel_iseq_m_sel is h1;
+    assert (grows #a #p (sel h0 is) (sel h1 is))
+  in
+  let g
+    (h0 h1: mem)
+  : Lemma
+    (requires (MR.stable_on_t (LocISeq?.contents is) p' /\ p' h0 /\ grows #a #p (sel h0 is) (sel h1 is)))
+    (ensures (p' h1))
+  =
+    sel_iseq_m_sel is h0;
+    sel_iseq_m_sel is h1
+  in
+  Classical.forall_intro_2 (let f' (h0: mem) = Classical.move_requires (f h0) in f');
+  Classical.forall_intro_2 (let g' (h0: mem) = Classical.move_requires (g h0) in g')
+
+abstract
+let int_at_most_is_stable (#r:ms_rid) (#a:Type) (#p: Seq.seq a -> Type) (is:iseq r a p) (k:int)
+  : Lemma (ensures (stable_on_t is (int_at_most k is)))
+  = stable_on_t_iseq is (int_at_most k is);
+    MS.int_at_most_is_stable (LocISeq?.contents is) k
+    
