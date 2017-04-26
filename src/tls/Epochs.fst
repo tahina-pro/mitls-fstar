@@ -26,10 +26,10 @@ open StAE
 
 module HH = TLSMem
 module HS = TLSMem
-module MR = FStar.Monotonic.RRef
-module MS = FStar.Monotonic.Seq
+// module MR = FStar.Monotonic.RRef
+// module MS = FStar.Monotonic.Seq
 type random = TLSInfo.random 
-
+module M = Mem
 
 type epoch_region_inv (#i:id) (hs_rgn:rgn) (r:reader (peerId i)) (w:writer i) =
   disjoint hs_rgn (region w) /\
@@ -109,34 +109,39 @@ let reveal_epochs_inv' (u:unit)
   = ()
 
 // Epoch counters i must satisfy -1 <= i < length !es
-type epoch_ctr_inv (#a:Type0) (#p:(seq a -> Type)) (r:rid) (es:MS.i_seq r a p) =
-  x:int{-1 <= x /\ witnessed (MS.int_at_most x es)}
+unfold
+let epoch_ctr_inv (#a:Type0) (#p:(seq a -> Type)) (r:rid) (es:Mem.iseq r a p) =
+  x:int{-1 <= x /\ witnessed (Mem.int_at_most x es)}
 
-type epoch_ctr (#a:Type0) (#p:(seq a -> Type)) (r:rid) (es:MS.i_seq r a p) =
-  m_rref r (epoch_ctr_inv r es) increases
+let epoch_ctr (#a:Type0) (#p:(seq a -> Type)) (r:rid) (es:Mem.iseq r a p) =
+  Mem.mref r (epoch_ctr_inv r es) increases
 
 // As part of the handshake state, 
 // we keep a sequence of allocated epochs, 
 // together with counters for reading and writing
 //NS: probably need some anti-aliasing invariant of these three references
 noeq type epochs (r:rgn) (n:random) = | MkEpochs: 
-  es: MS.i_seq r (epoch r n) (epochs_inv #r #n) ->
+  es: Mem.iseq r (epoch r n) (epochs_inv #r #n) ->
   read: epoch_ctr r es ->
   write: epoch_ctr r es -> epochs r n
 
 let containsT (#r:rgn) (#n:random) (es:epochs r n) (h:mem) =
-    MS.i_contains (MkEpochs?.es es) h 
+    Mem.contains h (MkEpochs?.es es) 
 
+assume
 val alloc_log_and_ctrs: #a:Type0 -> #p:(seq a -> Type0) -> r:rgn ->
-  ST (is:MS.i_seq r a p & c1:epoch_ctr r is & c2:epoch_ctr r is)
+  ST (is:Mem.iseq r a p & c1:epoch_ctr r is & c2:epoch_ctr r is)
     (requires (fun h -> p Seq.createEmpty))
     (ensures (fun h0 x h1 ->
-      TLSMem.hs_modifies_0 r h0 h1 /\
+      Mem.modifies_regions (Set.singleton r) h0 h1 /\
+      Mem.modifies_locs_in_region r TSet.empty h0 h1 /\
       (let (| is, c1, c2 |) = x in
-      i_contains is h1 /\
-      m_contains c1 h1 /\
-      m_contains c2 h1 /\ 
-      h1.[is] == Seq.createEmpty)))
+      Mem.contains h1 is /\
+      Mem.contains h1 c1 /\
+      Mem.contains h1 c2 /\ 
+      ((Mem.sel h1 is <: Mem.guarded (Seq.seq a) p) <: Seq.seq a) == Seq.createEmpty )))
+
+(*
 let alloc_log_and_ctrs #a #p r =
   let init = Seq.createEmpty in
   let is = alloc_mref_iseq p r init in
@@ -144,18 +149,33 @@ let alloc_log_and_ctrs #a #p r =
   let c1 : epoch_ctr #a #p r is = m_alloc r (-1) in
   let c2 : epoch_ctr #a #p r is = m_alloc r (-1) in
   (| is, c1, c2 |)
+*)
 
+let loc_type_mref
+  (#r: Mem.mr_rid)
+  (#a: Type)
+  (#b: Mem.reln a)
+  (x: Mem.mref r a b)
+: Lemma
+  (Mem.loc_type x == a)
+  [SMTPat (Mem.loc_type x)]
+= ()
+
+assume
 val incr_epoch_ctr :
   #a:Type0 ->
   #p:(seq a -> Type0) ->
   #r:rgn ->
-  #is:MS.i_seq r a p ->
+  #is:Mem.iseq r a p ->
   ctr:epoch_ctr r is ->
   ST unit
-    (requires fun h -> 1 + h.[ctr] < Seq.length (h.(is)))
+    (requires fun h -> 1 + Mem.sel h ctr < Seq.length (Mem.sel h is))
     (ensures (fun h0 _ h1 ->
-      TLSMem.m_rref_modifies_1 r ctr h0 h1 /\
-      h1.[ctr] = h0.[ctr] + 1))
+      Mem.modifies_regions (Set.singleton r) h0 h1 /\
+      Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
+      Mem.loc_type ctr == int /\
+      Mem.sel h1 ctr = Mem.sel h0 ctr + 1))
+      
 let incr_epoch_ctr #a #p #r #is ctr =
   m_recall ctr;
   let cur = m_read ctr in
