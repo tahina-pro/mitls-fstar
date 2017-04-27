@@ -109,7 +109,6 @@ let reveal_epochs_inv' (u:unit)
   = ()
 
 // Epoch counters i must satisfy -1 <= i < length !es
-unfold
 let epoch_ctr_inv (#a:Type0) (#p:(seq a -> Type)) (r:rid) (es:Mem.iseq r a p) =
   x:int{-1 <= x /\ witnessed (Mem.int_at_most x es)}
 
@@ -139,7 +138,7 @@ val alloc_log_and_ctrs: #a:Type0 -> #p:(seq a -> Type0) -> r:rgn ->
       Mem.contains h1 is /\
       Mem.contains h1 c1 /\
       Mem.contains h1 c2 /\ 
-      ((Mem.sel h1 is <: Mem.guarded (Seq.seq a) p) <: Seq.seq a) == Seq.createEmpty )))
+      (Mem.sel h1 is <: Seq.seq a) == Seq.createEmpty ))) // FIXME: better than before, but WHY WHY WHY is this type cast still needed
 
 (*
 let alloc_log_and_ctrs #a #p r =
@@ -151,15 +150,7 @@ let alloc_log_and_ctrs #a #p r =
   (| is, c1, c2 |)
 *)
 
-let loc_type_mref
-  (#r: Mem.mr_rid)
-  (#a: Type)
-  (#b: Mem.reln a)
-  (x: Mem.mref r a b)
-: Lemma
-  (Mem.loc_type x == a)
-  [SMTPat (Mem.loc_type x)]
-= ()
+#reset-options "--z3rlimit 16"
 
 assume
 val incr_epoch_ctr :
@@ -169,12 +160,12 @@ val incr_epoch_ctr :
   #is:Mem.iseq r a p ->
   ctr:epoch_ctr r is ->
   ST unit
-    (requires fun h -> 1 + Mem.hetero_id (epoch_ctr_inv r is) (Mem.sel h ctr) () < Seq.length (Mem.hetero_id (Mem.guarded (Seq.seq a) p) (Mem.sel h is) () <: Seq.seq a))
+    (requires fun h -> 1 + Mem.sel h ctr < Seq.length (Mem.sel h is <: Seq.seq a))
     (ensures (fun h0 _ h1 ->
       Mem.modifies_regions (Set.singleton r) h0 h1 /\
       Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
       Mem.loc_type ctr == int /\
-      (Mem.hetero_id (epoch_ctr_inv r is) (Mem.sel h1 ctr) ()) = (Mem.hetero_id (epoch_ctr_inv r is) (Mem.sel h0 ctr) ()) + 1))
+      (Mem.sel h1 ctr = Mem.sel h0 ctr + 1)))
 
 (*
 let incr_epoch_ctr #a #p #r #is ctr =
@@ -183,39 +174,53 @@ let incr_epoch_ctr #a #p #r #is ctr =
   MS.int_at_most_is_stable is (cur + 1);
   witness is (int_at_most (cur + 1) is);
   m_write ctr (cur + 1)
-       
+*)
+
+assume
 val create: r:rgn -> n:random -> ST (epochs r n)
     (requires (fun h -> True))
-    (ensures (fun h0 x h1 -> TLSMem.hs_modifies_0 r h0 h1))
+    (ensures (fun h0 x h1 ->
+      Mem.modifies_regions (Set.singleton r) h0 h1 /\
+      Mem.modifies_locs_in_region r TSet.empty h0 h1
+    ))
+(*
 let create (r:rgn) (n:random) =
   let (| esref, c1, c2 |) = alloc_log_and_ctrs #(epoch r n) #(epochs_inv #r #n) r in
   MkEpochs esref c1 c2
+*)
 
 unfold let incr_pre #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h : GTot Type0 =
   let ctr = proj es in
-  let cur = h.[ctr] in
-  cur + 1 < Seq.length (h.(MkEpochs?.es es))
+  let cur = Mem.sel h ctr in
+  cur + 1 < Seq.length (Mem.sel h (MkEpochs?.es es) <: Seq.seq (epoch r n))
+
+#reset-options "--z3rlimit 32"
 
 unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h0 (_:unit) h1 : GTot Type0 =
   let ctr = proj es in
-  let oldr = h0.[ctr] in
-  let newr = h1.[ctr] in
-  TLSMem.m_rref_modifies_1 r ctr h0 h1 /\
+  let oldr = Mem.sel h0 ctr in
+  let newr = Mem.sel h1 ctr <: int in // TODO: WHY WHY WHY is this cast needed?
+  Mem.modifies_regions (Set.singleton r) h0 h1 /\
+  Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
   newr = oldr + 1
 
+assume
 val add_epoch :
   #r:rgn -> #n:random -> es:epochs r n -> e:epoch r n ->
   ST unit
-    (requires fun h -> let is = MkEpochs?.es es in epochs_inv #r #n (Seq.snoc (h.(is)) e))
+    (requires fun h -> let is = MkEpochs?.es es in epochs_inv #r #n (Seq.snoc (Mem.sel h is) e))
     (ensures fun h0 x h1 ->
         let es = MkEpochs?.es es in
-        TLSMem.m_rref_modifies_1 r es h0 h1 /\
-        h1.(es) == Seq.snoc (h0.(es)) e)
+        Mem.modifies_regions (Set.singleton r) h0 h1 /\
+        Mem.modifies_locs_in_region r (TSet.singleton es) h0 h1 /\
+        Mem.sel h1 es == Seq.snoc (Mem.sel h0 es) e)
+(*
 let add_epoch #r #n (MkEpochs es _ _) e = MS.i_write_at_end es e
+*)
 
 let incr_reader #r #n (es:epochs r n) : ST unit
-    (requires (incr_pre es MkEpochs?.read))
-    (ensures (incr_post es MkEpochs?.read))
+  (requires (incr_pre es MkEpochs?.read))
+  (ensures (incr_post es MkEpochs?.read))
 = 
   incr_epoch_ctr (MkEpochs?.read es)
 
@@ -230,32 +235,32 @@ let get_epochs #r #n (es:epochs r n) = MkEpochs?.es es
 let ctr (#r:_) (#n:_) (e:epochs r n) (rw:rw) = match rw with 
   | Reader -> e.read
   | Writer -> e.write
- 
+
 val readerT: #rid:rgn -> #n:random -> e:epochs rid n -> mem -> GTot (epoch_ctr_inv rid (get_epochs e))
-let readerT #rid #n (MkEpochs es r w) (h:mem) = h.[r]
+let readerT #rid #n (MkEpochs es r w) (h:mem) = Mem.sel h r
 
 val writerT: #rid:rgn -> #n:random -> e:epochs rid n -> mem -> GTot (epoch_ctr_inv rid (get_epochs e))
-let writerT #rid #n (MkEpochs es r w) (h:mem) = h.[w]
+let writerT #rid #n (MkEpochs es r w) (h:mem) = Mem.sel h w
 
 unfold let get_ctr_post (#r:rgn) (#n:random) (es:epochs r n) (rw:rw) h0 (i:int) h1 = 
   let epochs = MkEpochs?.es es in
   h0 == h1 /\ 
-  i = h1.[(ctr es rw)] /\ 
+  i = (Mem.sel h1 (ctr es rw) <: int) /\  // FIXME: WHY WHY WHY is this cast needed?
   -1 <= i /\ 
-  MS.int_at_most i epochs h1
+  Mem.int_at_most i epochs h1
 
 let get_ctr (#r:rgn) (#n:random) (es:epochs r n) (rw:rw)
   : ST int (requires (fun h -> True)) (ensures (get_ctr_post es rw))
 = 
   let epochs = es.es in
-  let n = m_read (ctr es rw) in
-  testify (MS.int_at_most n epochs);
+  let n = Mem.read (ctr es rw) in
+  testify (Mem.int_at_most n epochs);
   n      
 
 let get_reader (#r:rgn) (#n:random) (es:epochs r n) = get_ctr es Reader
 let get_writer (#r:rgn) (#n:random) (es:epochs r n) = get_ctr es Writer
 
-let epochsT #r #n (es:epochs r n) (h:mem) = h.(MkEpochs?.es es)
+let epochsT #r #n (es:epochs r n) (h:mem) = Mem.sel h (MkEpochs?.es es)
 
 let get_current_epoch
   (#r:_)
@@ -263,16 +268,16 @@ let get_current_epoch
   (e:epochs r n)
   (rw:rw)
   : ST (epoch r n)
-       (requires (fun h -> 0 <= h.[(ctr e rw)]))
+       (requires (fun h -> 0 <= Mem.sel h (ctr e rw)))
        (ensures (fun h0 rd h1 -> 
-           let j = h1.[(ctr e rw)] in
-           let epochs = h1.(e.es) in
+           let j = Mem.sel h1 (ctr e rw) in
+           let epochs : Seq.seq (epoch r n) = Mem.sel h1 e.es in
            h0==h1 /\
            Seq.indexable epochs j /\
            rd == Seq.index epochs j))
 = 
   let j = get_ctr e rw in 
-  let epochs = MS.i_read e.es in
+  let epochs = Mem.read e.es in
   Seq.index epochs j
 
 val recordInstanceToEpoch: 
