@@ -169,13 +169,14 @@ val incr_epoch_ctr :
   #is:Mem.iseq r a p ->
   ctr:epoch_ctr r is ->
   ST unit
-    (requires fun h -> 1 + Mem.sel h ctr < Seq.length (Mem.sel h is))
+    (requires fun h -> 1 + Mem.hetero_id (epoch_ctr_inv r is) (Mem.sel h ctr) () < Seq.length (Mem.hetero_id (Mem.guarded (Seq.seq a) p) (Mem.sel h is) () <: Seq.seq a))
     (ensures (fun h0 _ h1 ->
       Mem.modifies_regions (Set.singleton r) h0 h1 /\
       Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
       Mem.loc_type ctr == int /\
-      Mem.sel h1 ctr = Mem.sel h0 ctr + 1))
-      
+      (Mem.hetero_id (epoch_ctr_inv r is) (Mem.sel h1 ctr) ()) = (Mem.hetero_id (epoch_ctr_inv r is) (Mem.sel h0 ctr) ()) + 1))
+
+(*
 let incr_epoch_ctr #a #p #r #is ctr =
   m_recall ctr;
   let cur = m_read ctr in
