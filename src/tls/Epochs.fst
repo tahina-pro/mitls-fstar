@@ -162,18 +162,19 @@ val incr_epoch_ctr :
   ST unit
     (requires fun h -> 1 + Mem.sel h ctr < Seq.length (Mem.sel h is <: Seq.seq a))
     (ensures (fun h0 _ h1 ->
-      Mem.modifies_regions (Set.singleton r) h0 h1 /\
+      Mem.modifies_regions (Set.singleton r) h0 h1 /\ (
+      Mem.loc_region_mref ctr; ( // FIXME: WHY WHY WHY does this become suddenly necessary? WHY WHY WHY does the pattern NOT trigger?
       Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
-      Mem.loc_type ctr == int /\
-      (Mem.sel h1 ctr = Mem.sel h0 ctr + 1)))
+      ((Mem.sel h1 ctr <: int) = (Mem.sel h0 ctr <: int) + 1 ) ))))
+
 
 (*
 let incr_epoch_ctr #a #p #r #is ctr =
-  m_recall ctr;
-  let cur = m_read ctr in
-  MS.int_at_most_is_stable is (cur + 1);
+  Mem.recall ctr;
+  let cur = Mem.read ctr in
+  Mem.int_at_most_is_stable is (cur + 1);
   witness is (int_at_most (cur + 1) is);
-  m_write ctr (cur + 1)
+  Mem.write ctr (cur + 1)
 *)
 
 assume
