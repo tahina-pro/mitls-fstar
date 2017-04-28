@@ -167,7 +167,6 @@ val incr_epoch_ctr :
       Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
       ((Mem.sel h1 ctr <: int) = (Mem.sel h0 ctr <: int) + 1 ) ))))
 
-
 (*
 let incr_epoch_ctr #a #p #r #is ctr =
   Mem.recall ctr;
@@ -212,9 +211,10 @@ val add_epoch :
     (requires fun h -> let is = MkEpochs?.es es in epochs_inv #r #n (Seq.snoc (Mem.sel h is) e))
     (ensures fun h0 x h1 ->
         let es = MkEpochs?.es es in
-        Mem.modifies_regions (Set.singleton r) h0 h1 /\
+        Mem.modifies_regions (Set.singleton r) h0 h1 /\ (
+        Mem.loc_region_mref es; ( // FIXME: WHY WHY WHY does this become suddenly necessary? WHY WHY WHY does the pattern NOT trigger?
         Mem.modifies_locs_in_region r (TSet.singleton es) h0 h1 /\
-        Mem.sel h1 es == Seq.snoc (Mem.sel h0 es) e)
+        Mem.sel h1 es == Seq.snoc (Mem.sel h0 es) e)))
 (*
 let add_epoch #r #n (MkEpochs es _ _) e = MS.i_write_at_end es e
 *)
@@ -281,7 +281,9 @@ let get_current_epoch
   let epochs = Mem.read e.es in
   Seq.index epochs j
 
+(* FIXME: WHY does the following not typecheck? Seems independent of Mem, isn't it?
 val recordInstanceToEpoch: 
   #r:rgn -> #n:random -> hs:Negotiation.handshake -> 
   ks:KeySchedule.recordInstance -> Tot (epoch r n)
 let recordInstanceToEpoch #hs_rgn #n hs (KeySchedule.StAEInstance #i rd wr) = Epoch hs rd wr
+*)
