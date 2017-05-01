@@ -7,12 +7,7 @@ module Epochs
     (i.e. we only keep old epoch AE logs for specifying authentication)
 *)
 
-open FStar.Heap
-open FStar.HyperHeap
 open FStar.Seq // DO NOT move further below, it would shadow `FStar.HyperStack.mem`
-open FStar.HyperStack
-open FStar.Monotonic.RRef
-open FStar.Monotonic.Seq
 open Platform.Error
 open Platform.Bytes
 
@@ -28,6 +23,8 @@ module HH = FStar.HyperHeap
 module HS = FStar.HyperStack
 module MR = FStar.Monotonic.RRef
 module MS = FStar.Monotonic.Seq
+module M = Mem
+
 type random = TLSInfo.random 
 
 inline_for_extraction let epochs_debug = true
@@ -43,17 +40,17 @@ unfold let trace = if epochs_debug then print else (fun _ -> ())
 
 
 type epoch_region_inv (#i:id) (hs_rgn:rgn) (r:reader (peerId i)) (w:writer i) =
-  disjoint hs_rgn (region w) /\
-  parent (region w) <> HH.root /\
-  parent (region r) <> HH.root /\
+  HH.disjoint hs_rgn (region w) /\
+  HH.parent (region w) <> HH.root /\
+  HH.parent (region r) <> HH.root /\
   // grandparent of each writer is a sibling of the handshake
-  parent hs_rgn = parent (parent (region w))  /\ 
-  disjoint (region w) (region r) /\
+  HH.parent hs_rgn = HH.parent (HH.parent (region w))  /\ 
+  HH.disjoint (region w) (region r) /\
   // they are all colored as epoch regions
   is_epoch_rgn (region w) /\ 
   is_epoch_rgn (region r) /\
-  is_epoch_rgn (parent (region w)) /\
-  is_epoch_rgn (parent (region r)) /\
+  is_epoch_rgn (HH.parent (region w)) /\
+  is_epoch_rgn (HH.parent (region r)) /\
   //except for the hs_rgn, of course
   is_hs_rgn hs_rgn
 
@@ -106,9 +103,9 @@ let epochs_inv (#r:rgn) (#n:random) (es: seq (epoch r n)) =
     let ei = Seq.index es i in
     let ej = Seq.index es j in
     // they all descend from a common epochs sub-region of the connection
-    parent (region ei.w) = parent (region ej.w) /\
+    HH.parent (region ei.w) = HH.parent (region ej.w) /\
     // each epoch writer lives in a region disjoint from the others
-    disjoint (region ei.w) (region ej.w)
+    HH.disjoint (region ei.w) (region ej.w)
 
 abstract let epochs_inv' (#r:rgn) (#n:random) (es: seq (epoch r n)) = epochs_inv es
 
@@ -120,11 +117,11 @@ let reveal_epochs_inv' (u:unit)
   = ()
 
 // Epoch counters i must satisfy -1 <= i < length !es
-type epoch_ctr_inv (#a:Type0) (#p:(seq a -> Type)) (r:rid) (es:MS.i_seq r a p) =
-  x:int{-1 <= x /\ witnessed (MS.int_at_most x es)}
+type epoch_ctr_inv (#a:Type0) (#p:(seq a -> Type)) (r:MS.rid) (es:Mem.iseq r a p) =
+  x:int{-1 <= x /\ Mem.witnessed (Mem.int_at_most x es)}
 
-type epoch_ctr (#a:Type0) (#p:(seq a -> Type)) (r:rid) (es:MS.i_seq r a p) =
-  m_rref r (epoch_ctr_inv r es) increases
+type epoch_ctr (#a:Type0) (#p:(seq a -> Type)) (r:MS.rid) (es:Mem.iseq r a p) =
+  Mem.mref r (epoch_ctr_inv r es) MS.increases
 
 // As part of the handshake state, 
 // we keep a sequence of allocated epochs, 
@@ -132,24 +129,26 @@ type epoch_ctr (#a:Type0) (#p:(seq a -> Type)) (r:rid) (es:MS.i_seq r a p) =
 //NS: probably need some anti-aliasing invariant of these three references
 //17-04-17 CF: consider switching to a single reference to a triple. 
 noeq type epochs (r:rgn) (n:random) = | MkEpochs: 
-  es: MS.i_seq r (epoch r n) (epochs_inv #r #n) ->
+  es: Mem.iseq r (epoch r n) (epochs_inv #r #n) ->
   read: epoch_ctr r es ->
   write: epoch_ctr r es -> epochs r n
 
-let containsT (#r:rgn) (#n:random) (es:epochs r n) (h:mem) =
-    MS.i_contains (MkEpochs?.es es) h 
+let containsT (#r:rgn) (#n:random) (es:epochs r n) (h: Mem.mem) =
+    Mem.contains h (MkEpochs?.es es) 
 
+assume
 val alloc_log_and_ctrs: #a:Type0 -> #p:(seq a -> Type0) -> r:rgn ->
-  ST (is:MS.i_seq r a p & c1:epoch_ctr r is & c2:epoch_ctr r is)
+  ST (is:Mem.iseq r a p & c1:epoch_ctr r is & c2:epoch_ctr r is)
     (requires (fun h -> p Seq.createEmpty))
     (ensures (fun h0 x h1 ->
-      modifies_one r h0 h1 /\ 
-      modifies_rref r Set.empty (HS.HS?.h h0) (HS.HS?.h h1) /\ 
+      Mem.modifies_regions (Set.singleton r) h0 h1 /\
+      Mem.modifies_locs_in_region r TSet.empty h0 h1 /\
       (let (| is, c1, c2 |) = x in
-      i_contains is h1 /\
-      m_contains c1 h1 /\
-      m_contains c2 h1 /\ 
-      i_sel h1 is == Seq.createEmpty)))
+      Mem.contains h1 is /\
+      Mem.contains h1 c1 /\
+      Mem.contains h1 c2 /\ 
+      (Mem.sel h1 is <: Seq.seq a) == Seq.createEmpty)))
+(*
 let alloc_log_and_ctrs #a #p r =
   let init = Seq.createEmpty in
   let is = alloc_mref_iseq p r init in
@@ -157,58 +156,69 @@ let alloc_log_and_ctrs #a #p r =
   let c1 : epoch_ctr #a #p r is = m_alloc r (-1) in
   let c2 : epoch_ctr #a #p r is = m_alloc r (-1) in
   (| is, c1, c2 |)
+*)
+
+#reset-options "--z3rlimit 16"
+#reset-options "--z3rlimit 128"
 
 val incr_epoch_ctr :
   #a:Type0 ->
   #p:(seq a -> Type0) ->
   #r:rgn ->
-  #is:MS.i_seq r a p ->
+  #is:Mem.iseq r a p ->
   ctr:epoch_ctr r is ->
   ST unit
-    (requires fun h -> 1 + m_sel h ctr < Seq.length (i_sel h is))
+    (requires fun h -> 1 + Mem.sel h ctr < Seq.length (Mem.sel h is <: Seq.seq a))
     (ensures (fun h0 _ h1 ->
-      let ctr_as_hsref = MR.as_hsref ctr in
-      modifies_one r h0 h1 /\
-      modifies_rref r (Set.singleton (Heap.addr_of (as_ref ctr_as_hsref))) (HS.HS?.h h0) (HS.HS?.h h1) /\
-      m_sel h1 ctr = m_sel h0 ctr + 1))
+      Mem.modifies_regions (Set.singleton r) h0 h1 /\ (
+      Mem.loc_region_mref ctr; ( // FIXME: WHY WHY WHY does this become suddenly necessary? WHY WHY WHY does the pattern NOT trigger?
+      Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
+      ((Mem.sel h1 ctr <: int) = (Mem.sel h0 ctr <: int) + 1 ) ))))
 let incr_epoch_ctr #a #p #r #is ctr =
-  m_recall ctr;
-  let cur = m_read ctr in
-  MS.int_at_most_is_stable is (cur + 1);
-  witness is (int_at_most (cur + 1) is);
-  m_write ctr (cur + 1)
+  Mem.recall ctr;
+  let cur : epoch_ctr_inv r is = Mem.read ctr in
+  Mem.int_at_most_is_stable is (cur + 1);
+  Mem.witness is (Mem.int_at_most (cur + 1) is);
+  Mem.write ctr (cur + 1)
        
+assume
 val create: r:rgn -> n:random -> ST (epochs r n)
     (requires (fun h -> True))
-    (ensures (fun h0 x h1 -> modifies_one r h0 h1 /\ modifies_rref r Set.empty (HS.HS?.h h0) (HS.HS?.h h1)))
+    (ensures (fun h0 x h1 ->
+      Mem.modifies_regions (Set.singleton r) h0 h1 /\ 
+      Mem.modifies_locs_in_region r TSet.empty h0 h1
+    ))
+(*
 let create (r:rgn) (n:random) =
   let (| esref, c1, c2 |) = alloc_log_and_ctrs #(epoch r n) #(epochs_inv #r #n) r in
   MkEpochs esref c1 c2
+*)
 
 unfold let incr_pre #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h : GTot Type0 =
   let ctr = proj es in
-  let cur = m_sel h ctr in
-  cur + 1 < Seq.length (i_sel h (MkEpochs?.es es))
+  let cur = Mem.sel h ctr in
+  cur + 1 < Seq.length (Mem.sel h (MkEpochs?.es es) <: Seq.seq (epoch r n))
 
 unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h0 (_:unit) h1 : GTot Type0 =
   let ctr = proj es in
-  let oldr = m_sel h0 ctr in
-  let newr = m_sel h1 ctr in
-  let ctr_as_hsref = MR.as_hsref ctr in
-  modifies_one r h0 h1 /\
-  HH.modifies_rref r (Set.singleton (Heap.addr_of (HH.as_ref (MkRef?.ref ctr_as_hsref)))) (HS.HS?.h h0) (HS.HS?.h h1) /\ 
+  let oldr = Mem.sel h0 ctr in
+  let newr = Mem.sel h1 ctr <: int in
+  Mem.modifies_regions (Set.singleton r) h0 h1 /\
+  Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
   newr = oldr + 1
 
 val add_epoch :
   #r:rgn -> #n:random -> es:epochs r n -> e:epoch r n ->
   ST unit
-    (requires fun h -> let is = MkEpochs?.es es in epochs_inv #r #n (Seq.snoc (i_sel h is) e))
+    (requires fun h -> let is = MkEpochs?.es es in epochs_inv #r #n (Seq.snoc (Mem.sel h is) e))
     (ensures fun h0 x h1 ->
         let es = MkEpochs?.es es in
-        let es_as_hsref = MR.as_hsref es in
-        modifies_one r h0 h1 /\ modifies_rref r (Set.singleton (Heap.addr_of (as_ref es_as_hsref))) (HS.HS?.h h0) (HS.HS?.h h1) /\
-        i_sel h1 es == Seq.snoc (i_sel h0 es) e)
-let add_epoch #r #n (MkEpochs es _ _) e = MS.i_write_at_end es e
+        Mem.modifies_regions (Set.singleton r) h0 h1 /\ (
+        Mem.loc_region_mref es; // FIXME: WHY WHY WHY does this become suddenly necessary? WHY WHY WHY does the pattern NOT trigger?
+        Mem.modifies_locs_in_region r (TSet.singleton es) h0 h1 /\
+        Mem.sel h1 es == Seq.snoc (Mem.sel h0 es) e
+    ))
+let add_epoch #r #n (MkEpochs es _ _) e = Mem.write_at_end es e
 
 let incr_reader #r #n (es:epochs r n) : ST unit
     (requires (incr_pre es MkEpochs?.read))
@@ -230,31 +240,31 @@ let ctr (#r:_) (#n:_) (e:epochs r n) (rw:rw) = match rw with
   | Reader -> e.read
   | Writer -> e.write
  
-val readerT: #rid:rgn -> #n:random -> e:epochs rid n -> mem -> GTot (epoch_ctr_inv rid (get_epochs e))
-let readerT #rid #n (MkEpochs es r w) (h:mem) = m_sel h r
+val readerT: #rid:rgn -> #n:random -> e:epochs rid n -> Mem.mem -> GTot (epoch_ctr_inv rid (get_epochs e))
+let readerT #rid #n (MkEpochs es r w) (h:Mem.mem) = Mem.sel h r
 
-val writerT: #rid:rgn -> #n:random -> e:epochs rid n -> mem -> GTot (epoch_ctr_inv rid (get_epochs e))
-let writerT #rid #n (MkEpochs es r w) (h:mem) = m_sel h w
+val writerT: #rid:rgn -> #n:random -> e:epochs rid n -> Mem.mem -> GTot (epoch_ctr_inv rid (get_epochs e))
+let writerT #rid #n (MkEpochs es r w) (h:Mem.mem) = Mem.sel h w
 
 unfold let get_ctr_post (#r:rgn) (#n:random) (es:epochs r n) (rw:rw) h0 (i:int) h1 = 
   let epochs = MkEpochs?.es es in
   h0 == h1 /\ 
-  i = m_sel h1 (ctr es rw) /\ 
+  i = (Mem.sel h1 (ctr es rw) <: int) /\ 
   -1 <= i /\ 
-  MS.int_at_most i epochs h1
+  Mem.int_at_most i epochs h1
 
 let get_ctr (#r:rgn) (#n:random) (es:epochs r n) (rw:rw)
   : ST int (requires (fun h -> True)) (ensures (get_ctr_post es rw))
 = 
   let epochs = es.es in
-  let n = m_read (ctr es rw) in
-  testify (MS.int_at_most n epochs);
+  let n = Mem.read (ctr es rw) in
+  MR.testify (Mem.int_at_most n epochs);
   n      
 
 let get_reader (#r:rgn) (#n:random) (es:epochs r n) = get_ctr es Reader
 let get_writer (#r:rgn) (#n:random) (es:epochs r n) = get_ctr es Writer
 
-let epochsT #r #n (es:epochs r n) (h:mem) = MS.i_sel h (MkEpochs?.es es)
+let epochsT #r #n (es:epochs r n) (h:Mem.mem) = Mem.sel h (MkEpochs?.es es)
 
 let get_current_epoch
   (#r:_)
@@ -262,17 +272,21 @@ let get_current_epoch
   (e:epochs r n)
   (rw:rw)
   : ST (epoch r n)
-       (requires (fun h -> 0 <= m_sel h (ctr e rw)))
+       (requires (fun h -> 0 <= Mem.sel h (ctr e rw)))
        (ensures (fun h0 rd h1 -> 
-           let j = m_sel h1 (ctr e rw) in
-           let epochs = MS.i_sel h1 e.es in
+           let j = Mem.sel h1 (ctr e rw) in
+           let epochs : Seq.seq (epoch r n) = Mem.sel h1 e.es in
            h0==h1 /\
            Seq.indexable epochs j /\
            rd == Seq.index epochs j))
 = 
   let j = get_ctr e rw in 
-  let epochs = MS.i_read e.es in
+  let epochs = Mem.read e.es in
   Seq.index epochs j
+
+// FIXME: WHY does the following not typecheck? Seems independent of Mem, isn't it?
+
+#set-options "--lax"
 
 val recordInstanceToEpoch: 
   #r:rgn -> #n:random -> hs:Negotiation.handshake -> 
