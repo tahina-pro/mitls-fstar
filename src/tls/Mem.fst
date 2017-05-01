@@ -201,6 +201,26 @@ let stable_on_t
   (p: (mem -> GTot Type0))
 = forall h0 h1 . p h0 /\ Class?.reln (Loc?.cl l) (sel h0 l) (sel h1 l) ==> p h1
 
+let reln_mref
+  (#r: MR.rid)
+  (#a:Type)
+  (#b:reln a)
+  (m:mref r a b)
+: Lemma
+  (Class?.reln (Loc?.cl m) == b)
+  [SMTPat (Class?.reln (Loc?.cl m))]
+= ()
+
+let reln_iseq
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (m: iseq r a p)
+: Lemma
+  (Class?.reln (Loc?.cl m) == (grows #a))
+  [SMTPat (Class?.reln (Loc?.cl m))]
+= ()
+
 let int_at_most #r #a #p (x:int) (is: iseq r a p) (h:mem) : Type0 =
   let s: Seq.seq a = sel h is in // TODO: WHY WHY WHY is this type cast needed?
   x < Seq.length s
@@ -417,6 +437,17 @@ let mref_not_mm
   (m: mref r a b)
 : Lemma
   (~ (loc_mm m))
+  [SMTPat (loc_mm m)]
+= ()
+
+let iseq_not_mm
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type)) 
+  (m: iseq r a p)
+: Lemma
+  (~ (loc_mm m))
+  [SMTPat (loc_mm m)]
 = ()
 
 let recall
@@ -567,3 +598,19 @@ let write_at_end
   let h0 = get () in
   assert (h0 `HS.contains` (MR.as_hsref rr));
   MR.m_write rr s
+
+(* witnesses a property stable by all updates on p; once we have a witness, there is no need to record that it was obtained using m's monotonicity. *) 
+
+let witnessed = MR.witnessed
+
+let witness
+  (#r: MR.rid)
+  (#a:Type)
+  (#b:reln a)
+  (m:mref r a b)
+  (p:(mem -> GTot Type0))
+: ST unit
+  (requires (fun h0 -> p h0 /\ stable_on_t m p))
+  (ensures (fun h0 _ h1 -> h0==h1 /\ witnessed p))
+= let m' = Loc?.obj m <: MR.m_rref r a b in
+  MR.witness m' p

@@ -151,8 +151,8 @@ let alloc_log_and_ctrs #a #p r =
 *)
 
 #reset-options "--z3rlimit 16"
+#reset-options "--z3rlimit 128"
 
-assume
 val incr_epoch_ctr :
   #a:Type0 ->
   #p:(seq a -> Type0) ->
@@ -166,15 +166,13 @@ val incr_epoch_ctr :
       Mem.loc_region_mref ctr; ( // FIXME: WHY WHY WHY does this become suddenly necessary? WHY WHY WHY does the pattern NOT trigger?
       Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
       ((Mem.sel h1 ctr <: int) = (Mem.sel h0 ctr <: int) + 1 ) ))))
-
-(*
 let incr_epoch_ctr #a #p #r #is ctr =
   Mem.recall ctr;
-  let cur = Mem.read ctr in
+  let cur : epoch_ctr_inv r is = Mem.read ctr in
   Mem.int_at_most_is_stable is (cur + 1);
-  witness is (int_at_most (cur + 1) is);
-  Mem.write ctr (cur + 1)
-*)
+  Mem.witness is (Mem.int_at_most (cur + 1) is);
+  Mem.write ctr (cur + 1);
+  ()
 
 assume
 val create: r:rgn -> n:random -> ST (epochs r n)
@@ -194,8 +192,6 @@ unfold let incr_pre #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr
   let cur = Mem.sel h ctr in
   cur + 1 < Seq.length (Mem.sel h (MkEpochs?.es es) <: Seq.seq (epoch r n))
 
-#reset-options "--z3rlimit 32"
-
 unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h0 (_:unit) h1 : GTot Type0 =
   let ctr = proj es in
   let oldr = Mem.sel h0 ctr in
@@ -204,7 +200,6 @@ unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ct
   Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
   newr = oldr + 1
 
-assume
 val add_epoch :
   #r:rgn -> #n:random -> es:epochs r n -> e:epoch r n ->
   ST unit
@@ -215,9 +210,7 @@ val add_epoch :
         Mem.loc_region_mref es; ( // FIXME: WHY WHY WHY does this become suddenly necessary? WHY WHY WHY does the pattern NOT trigger?
         Mem.modifies_locs_in_region r (TSet.singleton es) h0 h1 /\
         Mem.sel h1 es == Seq.snoc (Mem.sel h0 es) e)))
-(*
-let add_epoch #r #n (MkEpochs es _ _) e = MS.i_write_at_end es e
-*)
+let add_epoch #r #n (MkEpochs es _ _) e = Mem.write_at_end es e
 
 let incr_reader #r #n (es:epochs r n) : ST unit
   (requires (incr_pre es MkEpochs?.read))
