@@ -7,8 +7,14 @@ module MS = FStar.Monotonic.Seq
 
 let mem = HS.mem
 
+let rid = HH.rid
+let eternal_rid = MS.rid
+
 unfold
 let grows = MS.grows
+
+unfold
+let increases = MS.increases
 
 let is_eternal_region = HS.is_eternal_region
 
@@ -17,7 +23,7 @@ type class = | Class :
   (ref: Type) ->
   (value: Type) ->
   (as_reference: (ref -> GTot (HS.reference value))) ->
-  (region_guard: (HH.rid -> GTot Type)) ->
+  (region_guard: (rid -> GTot Type)) ->
   (region_guarded: (
     (r: ref) ->
     Lemma
@@ -81,7 +87,7 @@ let ref_cl (a: Type): Tot class = Class
 let ref (a: Type) : Tot Type = (l: loc { Loc?.cl l == ref_cl a } )
 
 unfold
-let mref_cl (r: MR.rid) (a: Type) (b: MR.reln a) : Tot class = Class
+let mref_cl (r: eternal_rid) (a: Type) (b: MR.reln a) : Tot class = Class
   (MR.m_rref r a b)
   a
   (MR.as_hsref #r #a #b)
@@ -93,7 +99,7 @@ let mref_cl (r: MR.rid) (a: Type) (b: MR.reln a) : Tot class = Class
   (fun l v h0 -> b (MR.m_sel h0 l) v)
   (fun l v -> MR.m_write l v)
 
-let mref (r: MR.rid) (a: Type) (b: MR.reln a) : Tot Type =
+let mref (r: eternal_rid) (a: Type) (b: MR.reln a) : Tot Type =
   (l: loc { Loc?.cl l == mref_cl r a b } )
 
 unfold
@@ -107,7 +113,7 @@ let hetero_id
   (ensures (fun y -> y == x /\ x == y))
 = x
 
-let iseq (r: MS.rid) (a: Type) (p: (Seq.seq a -> Type)) : Tot Type =
+let iseq (r: eternal_rid) (a: Type) (p: (Seq.seq a -> Type)) : Tot Type =
   mref r (s: Seq.seq a {p s}) grows
 
 unfold
@@ -115,7 +121,7 @@ let loc_type (l: loc) : Tot Type = Class?.value (Loc?.cl l)
 
 // unfold  // impossible, makes `loc_region` no longer typecheck
 let loc_region_type (l: loc) : Tot Type =
-  (r: HH.rid { Class?.region_guard (Loc?.cl l) r})
+  (r: rid { Class?.region_guard (Loc?.cl l) r})
 
 unfold
 let loc_region (l: loc) : GTot (loc_region_type l) =
@@ -124,7 +130,7 @@ let loc_region (l: loc) : GTot (loc_region_type l) =
   HS.frameOf (Class?.as_reference c r)
 
 let loc_region_mref
-  (#r: MR.rid)
+  (#r: eternal_rid)
   (#a: Type)
   (#b: MR.reln a)
   (x: mref r a b)
@@ -134,7 +140,7 @@ let loc_region_mref
 = ()
 
 let loc_region_iseq
-  (#r: MS.rid)
+  (#r: eternal_rid)
   (#a: Type)
   (#p: (Seq.seq a -> Type))
   (x: iseq r a p)
@@ -197,7 +203,7 @@ let contains_live_region
 let reln = MR.reln
 
 let reln_mref
-  (#r: MR.rid)
+  (#r: eternal_rid)
   (#a:Type)
   (#b:reln a)
   (m:mref r a b)
@@ -207,7 +213,7 @@ let reln_mref
 = ()
 
 let reln_iseq
-  (#r: MS.rid)
+  (#r: eternal_rid)
   (#a: Type)
   (#p: (Seq.seq a -> Type))
   (m: iseq r a p)
@@ -227,13 +233,11 @@ let int_at_most #r #a #p (x:int) (is: iseq r a p) (h:mem) : Type0 =
   x < Seq.length s
 
 abstract
-let int_at_most_is_stable (#r:MS.rid) (#a:Type) (#p: Seq.seq a -> Type) (is:iseq r a p) (k:int)
+let int_at_most_is_stable (#r:eternal_rid) (#a:Type) (#p: Seq.seq a -> Type) (is:iseq r a p) (k:int)
   : Lemma (ensures (stable_on_t is (int_at_most k is)))
 = let is' = Loc?.obj is <: MR.m_rref r (s: Seq.seq a {p s}) grows in
   assert (forall h . sel h is == MS.i_sel h is');
   MS.int_at_most_is_stable is' k
-
-let rid = HH.rid
 
 let modifies_regions
   (rs: Set.set rid)
@@ -275,7 +279,7 @@ assume val filter
 : GTot (Set.set nat)
 
 assume val mem_filter
-  (r: HH.rid)
+  (r: rid)
   (ls: TSet.set loc)
 : Lemma
   (forall (a:nat) .
@@ -288,7 +292,7 @@ assume val mem_filter
   [SMTPat (filter r ls)]
 
 let filter_union
-  (r: HH.rid)
+  (r: rid)
   (ls1 ls2: TSet.set loc)
 : Lemma
   (filter r (TSet.union ls1 ls2) == Set.union (filter r ls1) (filter r ls2))
@@ -296,39 +300,39 @@ let filter_union
 = Set.lemma_equal_elim (filter r (TSet.union ls1 ls2)) (Set.union (filter r ls1) (filter r ls2))
 
 let filter_empty
-  (r: HH.rid)
+  (r: rid)
 : Lemma
   (filter r TSet.empty == Set.empty)
   [SMTPat (filter r TSet.empty)]
 = Set.lemma_equal_elim (filter r TSet.empty) Set.empty
 
 let filter_singleton_same
-  (r: HH.rid)
+  (r: rid)
   (l: loc)
 : Lemma
-  (requires (r = (loc_region l <: HH.rid)))
+  (requires (r = (loc_region l <: rid)))
   (ensures (filter r (TSet.singleton l) == Set.singleton (HS.as_addr (as_reference l))))
   [SMTPat (filter r (TSet.singleton l))]
 = Set.lemma_equal_elim (filter r (TSet.singleton l)) (Set.singleton (HS.as_addr (as_reference l)))
 
 let filter_singleton_other
-  (r: HH.rid)
+  (r: rid)
   (l: loc)
 : Lemma
-  (requires (r <> (loc_region l <: HH.rid)))
+  (requires (r <> (loc_region l <: rid)))
   (ensures (filter r (TSet.singleton l) == Set.empty))
   [SMTPat (filter r (TSet.singleton l))]
 = Set.lemma_equal_elim (filter r (TSet.singleton l)) Set.empty
 
 let modifies_locs_in_region
-  (r: HH.rid)
+  (r: rid)
   (ls: TSet.set loc {forall (l: loc {TSet.mem l ls}) . r == loc_region l})
   (h0 h1: mem)
 : GTot Type0
 = HH.modifies_rref r (filter r ls) h0.HS.h h1.HS.h
 
 let modifies_locs_in_region_refl
-  (r: HH.rid)
+  (r: rid)
   (ls: TSet.set loc {forall (l: loc {TSet.mem l ls}) . r == loc_region l})
   (h: mem)
 : Lemma
@@ -336,7 +340,7 @@ let modifies_locs_in_region_refl
 = ()
 
 let modifies_locs_in_region_trans
-  (r: HH.rid)
+  (r: rid)
   (ls12: TSet.set loc {(forall (l: loc {TSet.mem l ls12}) . r == loc_region l)})
   (ls23: TSet.set loc {(forall (l: loc {TSet.mem l ls23}) . r == loc_region l)})
   (h1 h2 h3: mem)
@@ -351,7 +355,7 @@ let modifies_locs_in_region_trans
 = ()
 
 let modifies_locs_in_region_subset
-  (r: HH.rid)
+  (r: rid)
   (ls: TSet.set loc {(forall (l: loc {TSet.mem l ls}) . r == loc_region l)})
   (ls': TSet.set loc {(forall (l: loc {TSet.mem l ls'}) . r == loc_region l)})
   (h h' : mem)
@@ -361,8 +365,8 @@ let modifies_locs_in_region_subset
 = ()
 
 let modifies_regions_modifies_locs_in_region
-  (r: HH.rid)
-  (rs: Set.set HH.rid)
+  (r: rid)
+  (rs: Set.set rid)
   (h h' : mem)
 : Lemma
   (requires ((~ (Set.mem r rs)) /\ modifies_regions rs h h' /\ live_region h r))
@@ -388,7 +392,7 @@ let loc_diff_sym
 = ()
 
 let modifies_locs_in_region_sel
-  (r: HH.rid)
+  (r: rid)
   (ls: TSet.set loc {(forall (l: loc {TSet.mem l ls}) . r == loc_region l)})
   (h h': mem)
   (l: loc)
@@ -432,7 +436,7 @@ let loc_mm
 = HS.is_mm (as_reference l)
 
 let mref_not_mm
-  (#r: MR.rid)
+  (#r: eternal_rid)
   (#a: Type)
   (#b: MR.reln a)
   (m: mref r a b)
@@ -442,7 +446,7 @@ let mref_not_mm
 = ()
 
 let iseq_not_mm
-  (#r: MS.rid)
+  (#r: eternal_rid)
   (#a: Type)
   (#p: (Seq.seq a -> Type)) 
   (m: iseq r a p)
@@ -477,7 +481,7 @@ let weak_live_region_not_mm_weak_contains
 = ()
 
 let weak_contains_mref
-  (#r: MR.rid)
+  (#r: eternal_rid)
   (#a: Type)
   (#b: MR.reln a)
   (m: mref r a b)
@@ -488,7 +492,7 @@ let weak_contains_mref
 = ()
 
 let weak_contains_iseq
-  (#r: MS.rid)
+  (#r: eternal_rid)
   (#a: Type)
   (#p: (Seq.seq a -> Type)) 
   (m: iseq r a p)
@@ -531,7 +535,7 @@ let ref_write_pre
 = ()
 
 let mref_write_pre
-  (#r: MR.rid)
+  (#r: eternal_rid)
   (#a: Type)
   (#b: MR.reln a)
   (h0: mem)
@@ -556,7 +560,7 @@ let get = ST.get
 
 unfold
 let write_at_end_pre
-  (#rgn: MS.rid)
+  (#rgn: eternal_rid)
   (#a: Type)
   (#p: (Seq.seq a -> Type))
   (r: iseq rgn a p)
@@ -567,7 +571,7 @@ let write_at_end_pre
 
 unfold
 let write_at_end_post
-  (#rgn: MS.rid)
+  (#rgn: eternal_rid)
   (#a: Type)
   (#p: (Seq.seq a -> Type))
   (r: iseq rgn a p)
@@ -584,7 +588,7 @@ let write_at_end_post
 
 abstract
 let write_at_end
-  (#rgn: MS.rid)
+  (#rgn: eternal_rid)
   (#a: Type)
   (#p: (Seq.seq a -> Type))
   (r: iseq rgn a p)
@@ -605,7 +609,7 @@ let write_at_end
 let witnessed = MR.witnessed
 
 let witness
-  (#r: MR.rid)
+  (#r: eternal_rid)
   (#a:Type)
   (#b:reln a)
   (m:mref r a b)
@@ -615,3 +619,12 @@ let witness
   (ensures (fun h0 _ h1 -> h0==h1 /\ witnessed p))
 = let m' = Loc?.obj m <: MR.m_rref r a b in
   MR.witness m' p
+
+let testify = MR.testify
+
+(* Operations and relations on regions *)
+
+let disjoint = HH.disjoint
+let parent = HH.parent
+let root = HH.root
+

@@ -19,12 +19,6 @@ open Range
 open StAE
 //open Negotiation
 
-module HH = FStar.HyperHeap
-module HS = FStar.HyperStack
-module MR = FStar.Monotonic.RRef
-module MS = FStar.Monotonic.Seq
-module M = Mem
-
 type random = TLSInfo.random 
 
 inline_for_extraction let epochs_debug = true
@@ -40,17 +34,17 @@ unfold let trace = if epochs_debug then print else (fun _ -> ())
 
 
 type epoch_region_inv (#i:id) (hs_rgn:rgn) (r:reader (peerId i)) (w:writer i) =
-  HH.disjoint hs_rgn (region w) /\
-  HH.parent (region w) <> HH.root /\
-  HH.parent (region r) <> HH.root /\
+  Mem.disjoint hs_rgn (region w) /\
+  Mem.parent (region w) <> Mem.root /\
+  Mem.parent (region r) <> Mem.root /\
   // grandparent of each writer is a sibling of the handshake
-  HH.parent hs_rgn = HH.parent (HH.parent (region w))  /\ 
-  HH.disjoint (region w) (region r) /\
+  Mem.parent hs_rgn = Mem.parent (Mem.parent (region w))  /\ 
+  Mem.disjoint (region w) (region r) /\
   // they are all colored as epoch regions
   is_epoch_rgn (region w) /\ 
   is_epoch_rgn (region r) /\
-  is_epoch_rgn (HH.parent (region w)) /\
-  is_epoch_rgn (HH.parent (region r)) /\
+  is_epoch_rgn (Mem.parent (region w)) /\
+  is_epoch_rgn (Mem.parent (region r)) /\
   //except for the hs_rgn, of course
   is_hs_rgn hs_rgn
 
@@ -103,9 +97,9 @@ let epochs_inv (#r:rgn) (#n:random) (es: seq (epoch r n)) =
     let ei = Seq.index es i in
     let ej = Seq.index es j in
     // they all descend from a common epochs sub-region of the connection
-    HH.parent (region ei.w) = HH.parent (region ej.w) /\
+    Mem.parent (region ei.w) = Mem.parent (region ej.w) /\
     // each epoch writer lives in a region disjoint from the others
-    HH.disjoint (region ei.w) (region ej.w)
+    Mem.disjoint (region ei.w) (region ej.w)
 
 abstract let epochs_inv' (#r:rgn) (#n:random) (es: seq (epoch r n)) = epochs_inv es
 
@@ -117,11 +111,11 @@ let reveal_epochs_inv' (u:unit)
   = ()
 
 // Epoch counters i must satisfy -1 <= i < length !es
-type epoch_ctr_inv (#a:Type0) (#p:(seq a -> Type)) (r:MS.rid) (es:Mem.iseq r a p) =
+type epoch_ctr_inv (#a:Type0) (#p:(seq a -> Type)) (r:Mem.eternal_rid) (es:Mem.iseq r a p) =
   x:int{-1 <= x /\ Mem.witnessed (Mem.int_at_most x es)}
 
-type epoch_ctr (#a:Type0) (#p:(seq a -> Type)) (r:MS.rid) (es:Mem.iseq r a p) =
-  Mem.mref r (epoch_ctr_inv r es) MS.increases
+type epoch_ctr (#a:Type0) (#p:(seq a -> Type)) (r:Mem.eternal_rid) (es:Mem.iseq r a p) =
+  Mem.mref r (epoch_ctr_inv r es) Mem.increases
 
 // As part of the handshake state, 
 // we keep a sequence of allocated epochs, 
@@ -258,7 +252,7 @@ let get_ctr (#r:rgn) (#n:random) (es:epochs r n) (rw:rw)
 = 
   let epochs = es.es in
   let n = Mem.read (ctr es rw) in
-  MR.testify (Mem.int_at_most n epochs);
+  Mem.testify (Mem.int_at_most n epochs);
   n      
 
 let get_reader (#r:rgn) (#n:random) (es:epochs r n) = get_ctr es Reader
