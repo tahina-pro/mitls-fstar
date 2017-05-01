@@ -8,7 +8,7 @@ module MS = FStar.Monotonic.Seq
 let mem = HS.mem
 
 unfold
-let grows (a: Type) (p: (Seq.seq a -> Type)) (s1 s2: (s: Seq.seq a {p s})) = MS.grows s1 s2
+let grows = MS.grows
 
 let is_eternal_region = HS.is_eternal_region
 
@@ -107,32 +107,8 @@ let hetero_id
   (ensures (fun y -> y == x /\ x == y))
 = x
 
-unfold
-let i_as_hsref
-  (r: MS.rid)
-  (a: Type)
-  (p: (Seq.seq a -> Type))
-  (x: MS.i_seq r a p)
-: GTot (HS.reference (s: (Seq.seq a) {p s}))
-= let (x : HS.ref (s: Seq.seq a {p s}) { x.HS.id = r}) = MR.as_hsref x in
-  let (y: HS.reference (s: Seq.seq a {p s})) = x in
-  hetero_id (HS.reference (s: Seq.seq a {p s})) y ()
-
-unfold
-let iseq_cl (r: MS.rid) (a: Type) (p: (Seq.seq a -> Type)) : Tot class = Class
-  (MS.i_seq r a p)
-  (s: (Seq.seq a) {p s})
-  (i_as_hsref r a p)
-  (fun r -> HS.is_eternal_region r)
-  (fun _ -> ())
-  (grows a p)
-  (fun r -> MR.m_recall r)
-  (fun r -> MS.i_read r)
-  (fun _ _ _ -> False)
-  (fun _ _ -> ())
-
 let iseq (r: MS.rid) (a: Type) (p: (Seq.seq a -> Type)) : Tot Type =
-  (l: loc { Loc?.cl l == iseq_cl r a p } )
+  mref r (s: Seq.seq a {p s}) grows
 
 unfold
 let loc_type (l: loc) : Tot Type = Class?.value (Loc?.cl l)
@@ -146,6 +122,26 @@ let loc_region (l: loc) : GTot (loc_region_type l) =
   let (Loc c r) = l in
   Class?.region_guarded c r;
   HS.frameOf (Class?.as_reference c r)
+
+let loc_region_mref
+  (#r: MR.rid)
+  (#a: Type)
+  (#b: MR.reln a)
+  (x: mref r a b)
+: Lemma
+  (loc_region x == r)
+  [SMTPat (loc_region x)]
+= ()
+
+let loc_region_iseq
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (x: iseq r a p)
+: Lemma
+  (loc_region x == r)
+  [SMTPat (loc_region x)]
+= ()
 
 unfold
 let as_reference
@@ -200,6 +196,26 @@ let contains_live_region
 
 let reln = MR.reln
 
+let reln_mref
+  (#r: MR.rid)
+  (#a:Type)
+  (#b:reln a)
+  (m:mref r a b)
+: Lemma
+  (Class?.reln (Loc?.cl m) == b)
+  [SMTPat (Class?.reln (Loc?.cl m))]
+= ()
+
+let reln_iseq
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type))
+  (m: iseq r a p)
+: Lemma
+  (Class?.reln (Loc?.cl m) == (grows #a))
+  [SMTPat (Class?.reln (Loc?.cl m))]
+= ()
+
 unfold
 let stable_on_t
   (l: loc)
@@ -213,8 +229,9 @@ let int_at_most #r #a #p (x:int) (is: iseq r a p) (h:mem) : Type0 =
 abstract
 let int_at_most_is_stable (#r:MS.rid) (#a:Type) (#p: Seq.seq a -> Type) (is:iseq r a p) (k:int)
   : Lemma (ensures (stable_on_t is (int_at_most k is)))
-= assert (forall h . sel h is == MS.i_sel h (Loc?.obj is <: MS.i_seq r a p));
-  MS.int_at_most_is_stable (Loc?.obj is <: MS.i_seq r a p) k
+= let is' = Loc?.obj is <: MR.m_rref r (s: Seq.seq a {p s}) grows in
+  assert (forall h . sel h is == MS.i_sel h is');
+  MS.int_at_most_is_stable is' k
 
 let rid = HH.rid
 
@@ -421,6 +438,17 @@ let mref_not_mm
   (m: mref r a b)
 : Lemma
   (~ (loc_mm m))
+  [SMTPat (loc_mm m)]
+= ()
+
+let iseq_not_mm
+  (#r: MS.rid)
+  (#a: Type)
+  (#p: (Seq.seq a -> Type)) 
+  (m: iseq r a p)
+: Lemma
+  (~ (loc_mm m))
+  [SMTPat (loc_mm m)]
 = ()
 
 let recall
@@ -571,3 +599,19 @@ let write_at_end
   let h0 = get () in
   assert (h0 `HS.contains` (MR.as_hsref rr));
   MR.m_write rr s
+
+(* witnesses a property stable by all updates on p; once we have a witness, there is no need to record that it was obtained using m's monotonicity. *) 
+
+let witnessed = MR.witnessed
+
+let witness
+  (#r: MR.rid)
+  (#a:Type)
+  (#b:reln a)
+  (m:mref r a b)
+  (p:(mem -> GTot Type0))
+: ST unit
+  (requires (fun h0 -> p h0 /\ stable_on_t m p))
+  (ensures (fun h0 _ h1 -> h0==h1 /\ witnessed p))
+= let m' = Loc?.obj m <: MR.m_rref r a b in
+  MR.witness m' p
