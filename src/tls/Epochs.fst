@@ -141,7 +141,7 @@ val alloc_log_and_ctrs: #a:Type0 -> #p:(seq a -> Type0) -> r:rgn ->
       Mem.contains h1 is /\
       Mem.contains h1 c1 /\
       Mem.contains h1 c2 /\ 
-      (Mem.sel h1 is <: Seq.seq a) == Seq.createEmpty)))
+      Mem.sel h1 is == Seq.createEmpty)))
 (*
 let alloc_log_and_ctrs #a #p r =
   let init = Seq.createEmpty in
@@ -162,15 +162,15 @@ val incr_epoch_ctr :
   #is:Mem.iseq r a p ->
   ctr:epoch_ctr r is ->
   ST unit
-    (requires fun h -> 1 + Mem.sel h ctr < Seq.length (Mem.sel h is <: Seq.seq a))
+    (requires fun h -> 1 + Mem.sel h ctr < Seq.length (Mem.sel h is))
     (ensures (fun h0 _ h1 ->
       Mem.modifies_regions (Set.singleton r) h0 h1 /\ (
       Mem.loc_region_mref ctr; ( // FIXME: WHY WHY WHY does this become suddenly necessary? WHY WHY WHY does the pattern NOT trigger?
       Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
-      ((Mem.sel h1 ctr <: int) = (Mem.sel h0 ctr <: int) + 1 ) ))))
+      (Mem.sel h1 ctr = Mem.sel h0 ctr + 1 ) ))))
 let incr_epoch_ctr #a #p #r #is ctr =
   Mem.recall ctr;
-  let cur : epoch_ctr_inv r is = Mem.read ctr in
+  let cur = Mem.read ctr in
   Mem.int_at_most_is_stable is (cur + 1);
   Mem.witness is (Mem.int_at_most (cur + 1) is);
   Mem.write ctr (cur + 1)
@@ -191,12 +191,12 @@ let create (r:rgn) (n:random) =
 unfold let incr_pre #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h : GTot Type0 =
   let ctr = proj es in
   let cur = Mem.sel h ctr in
-  cur + 1 < Seq.length (Mem.sel h (MkEpochs?.es es) <: Seq.seq (epoch r n))
+  cur + 1 < Seq.length (Mem.sel h (MkEpochs?.es es))
 
 unfold let incr_post #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h0 (_:unit) h1 : GTot Type0 =
   let ctr = proj es in
   let oldr = Mem.sel h0 ctr in
-  let newr = Mem.sel h1 ctr <: int in
+  let newr = Mem.sel h1 ctr in
   Mem.modifies_regions (Set.singleton r) h0 h1 /\
   Mem.modifies_locs_in_region r (TSet.singleton ctr) h0 h1 /\
   newr = oldr + 1
@@ -243,7 +243,7 @@ let writerT #rid #n (MkEpochs es r w) (h:Mem.mem) = Mem.sel h w
 unfold let get_ctr_post (#r:rgn) (#n:random) (es:epochs r n) (rw:rw) h0 (i:int) h1 = 
   let epochs = MkEpochs?.es es in
   h0 == h1 /\ 
-  i = (Mem.sel h1 (ctr es rw) <: int) /\ 
+  i = (Mem.sel h1 (ctr es rw)) /\ 
   -1 <= i /\ 
   Mem.int_at_most i epochs h1
 
@@ -269,7 +269,7 @@ let get_current_epoch
        (requires (fun h -> 0 <= Mem.sel h (ctr e rw)))
        (ensures (fun h0 rd h1 -> 
            let j = Mem.sel h1 (ctr e rw) in
-           let epochs : Seq.seq (epoch r n) = Mem.sel h1 e.es in
+           let epochs = Mem.sel h1 e.es in
            h0==h1 /\
            Seq.indexable epochs j /\
            rd == Seq.index epochs j))

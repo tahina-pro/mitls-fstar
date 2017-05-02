@@ -66,10 +66,12 @@ type class = | Class :
   class
 
 noeq
-type loc = | Loc :
+type aloc = | Loc :
   (cl: class) ->
   (obj: Class?.ref cl) ->
-  loc
+  aloc
+
+let loc (a: Type) = (l: aloc { Class?.value (Loc?.cl l) == a } )
 
 unfold
 let ref_cl (a: Type): Tot class = Class
@@ -84,7 +86,7 @@ let ref_cl (a: Type): Tot class = Class
   (fun _ _ _ -> True)
   (fun r v -> r := v)
 
-let ref (a: Type) : Tot Type = (l: loc { Loc?.cl l == ref_cl a } )
+let ref (a: Type) : Tot Type = (l: loc a { Loc?.cl l == ref_cl a } )
 
 unfold
 let mref_cl (r: eternal_rid) (a: Type) (b: MR.reln a) : Tot class = Class
@@ -100,7 +102,7 @@ let mref_cl (r: eternal_rid) (a: Type) (b: MR.reln a) : Tot class = Class
   (fun l v -> MR.m_write l v)
 
 let mref (r: eternal_rid) (a: Type) (b: MR.reln a) : Tot Type =
-  (l: loc { Loc?.cl l == mref_cl r a b } )
+  (l: loc a { Loc?.cl l == mref_cl r a b } )
 
 unfold
 let hetero_id
@@ -117,14 +119,22 @@ let iseq (r: eternal_rid) (a: Type) (p: (Seq.seq a -> Type)) : Tot Type =
   mref r (s: Seq.seq a {p s}) grows
 
 unfold
-let loc_type (l: loc) : Tot Type = Class?.value (Loc?.cl l)
+let loc_type (l: aloc) : Tot Type = Class?.value (Loc?.cl l)
+
+let loc_type_loc
+  (#a: Type)
+  (l: loc a)
+: Lemma
+  (loc_type l == a)
+  [SMTPat (loc_type l)]
+= ()
 
 // unfold  // impossible, makes `loc_region` no longer typecheck
-let loc_region_type (l: loc) : Tot Type =
+let loc_region_type (l: aloc) : Tot Type =
   (r: rid { Class?.region_guard (Loc?.cl l) r})
 
 unfold
-let loc_region (l: loc) : GTot (loc_region_type l) =
+let loc_region (l: aloc) : GTot (loc_region_type l) =
   let (Loc c r) = l in
   Class?.region_guarded c r;
   HS.frameOf (Class?.as_reference c r)
@@ -151,32 +161,35 @@ let loc_region_iseq
 
 unfold
 let as_reference
-  (l: loc)
+  (l: aloc)
 : GTot (HS.reference (loc_type l))
 = Class?.as_reference (Loc?.cl l) (Loc?.obj l)
 
 unfold
 let sel
+  (#a: Type)
   (h: mem)
-  (l: loc)
-: GTot (loc_type l)
+  (l: loc a)
+: GTot a
 = HS.sel h (as_reference l)
 
 let live_region = HS.live_region
 
 unfold
 let upd
+  (#a: Type)
   (h: mem)
-  (l: loc { live_region h (loc_region l) } )
-  (v: loc_type l)
+  (l: loc a { live_region h (loc_region l) } )
+  (v: a)
 : GTot (mem)
 = HS.upd h (as_reference l) v
 
 abstract
 let sel_upd
+  (#a: Type)
   (h: mem)
-  (l: loc { live_region h (loc_region l) })
-  (x: loc_type l)
+  (l: loc a { live_region h (loc_region l) })
+  (x: a)
 : Lemma
   (sel (upd h l x) l == x)
   [SMTPat (sel (upd h l x) l)]
@@ -185,11 +198,11 @@ let sel_upd
 unfold
 let contains
   (h: mem)
-  (l: loc)
+  (l: aloc)
 = HS.contains h (as_reference l)
 
 let contains_live_region
-  (l: loc)
+  (l: aloc)
   h
 : Lemma
   (requires (contains h l))
@@ -224,12 +237,13 @@ let reln_iseq
 
 unfold
 let stable_on_t
-  (l: loc)
+  (#a: Type)
+  (l: loc a)
   (p: (mem -> GTot Type0))
 = forall h0 h1 . p h0 /\ Class?.reln (Loc?.cl l) (sel h0 l) (sel h1 l) ==> p h1
 
 let int_at_most #r #a #p (x:int) (is: iseq r a p) (h:mem) : Type0 =
-  let s: Seq.seq a = sel h is in // TODO: WHY WHY WHY is this type cast needed?
+  let s = sel h is in
   x < Seq.length s
 
 abstract
@@ -275,16 +289,16 @@ let modifies_regions_subset
 
 assume val filter
   (r: rid)
-  (ls: TSet.set loc)
+  (ls: TSet.set aloc)
 : GTot (Set.set nat)
 
 assume val mem_filter
   (r: rid)
-  (ls: TSet.set loc)
+  (ls: TSet.set aloc)
 : Lemma
   (forall (a:nat) .
     Set.mem a (filter r ls) <==> (
-    exists (l: loc) . (
+    exists (l: aloc) . (
       TSet.mem l ls /\
       r == loc_region l /\
       a == HS.as_addr (as_reference l)
@@ -293,7 +307,7 @@ assume val mem_filter
 
 let filter_union
   (r: rid)
-  (ls1 ls2: TSet.set loc)
+  (ls1 ls2: TSet.set aloc)
 : Lemma
   (filter r (TSet.union ls1 ls2) == Set.union (filter r ls1) (filter r ls2))
   [SMTPat (filter r (TSet.union ls1 ls2))]
@@ -308,7 +322,7 @@ let filter_empty
 
 let filter_singleton_same
   (r: rid)
-  (l: loc)
+  (l: aloc)
 : Lemma
   (requires (r = (loc_region l <: rid)))
   (ensures (filter r (TSet.singleton l) == Set.singleton (HS.as_addr (as_reference l))))
@@ -317,7 +331,7 @@ let filter_singleton_same
 
 let filter_singleton_other
   (r: rid)
-  (l: loc)
+  (l: aloc)
 : Lemma
   (requires (r <> (loc_region l <: rid)))
   (ensures (filter r (TSet.singleton l) == Set.empty))
@@ -326,14 +340,14 @@ let filter_singleton_other
 
 let modifies_locs_in_region
   (r: rid)
-  (ls: TSet.set loc {forall (l: loc {TSet.mem l ls}) . r == loc_region l})
+  (ls: TSet.set aloc {forall (l: aloc {TSet.mem l ls}) . r == loc_region l})
   (h0 h1: mem)
 : GTot Type0
 = HH.modifies_rref r (filter r ls) h0.HS.h h1.HS.h
 
 let modifies_locs_in_region_refl
   (r: rid)
-  (ls: TSet.set loc {forall (l: loc {TSet.mem l ls}) . r == loc_region l})
+  (ls: TSet.set aloc {forall (l: aloc {TSet.mem l ls}) . r == loc_region l})
   (h: mem)
 : Lemma
   (modifies_locs_in_region r ls h h)
@@ -341,8 +355,8 @@ let modifies_locs_in_region_refl
 
 let modifies_locs_in_region_trans
   (r: rid)
-  (ls12: TSet.set loc {(forall (l: loc {TSet.mem l ls12}) . r == loc_region l)})
-  (ls23: TSet.set loc {(forall (l: loc {TSet.mem l ls23}) . r == loc_region l)})
+  (ls12: TSet.set aloc {(forall (l: aloc {TSet.mem l ls12}) . r == loc_region l)})
+  (ls23: TSet.set aloc {(forall (l: aloc {TSet.mem l ls23}) . r == loc_region l)})
   (h1 h2 h3: mem)
 : Lemma
   (requires (
@@ -356,8 +370,8 @@ let modifies_locs_in_region_trans
 
 let modifies_locs_in_region_subset
   (r: rid)
-  (ls: TSet.set loc {(forall (l: loc {TSet.mem l ls}) . r == loc_region l)})
-  (ls': TSet.set loc {(forall (l: loc {TSet.mem l ls'}) . r == loc_region l)})
+  (ls: TSet.set aloc {(forall (l: aloc {TSet.mem l ls}) . r == loc_region l)})
+  (ls': TSet.set aloc {(forall (l: aloc {TSet.mem l ls'}) . r == loc_region l)})
   (h h' : mem)
 : Lemma
   (requires (TSet.subset ls ls' /\ modifies_locs_in_region r ls h h'))
@@ -374,36 +388,37 @@ let modifies_regions_modifies_locs_in_region
 = ()
 
 let loc_diff
-  (l1 l2: loc)
+  (l1 l2: aloc)
 : GTot Type0
 = (HS.as_addr (as_reference l1) <> HS.as_addr (as_reference l2))
 
 let loc_diff_irrefl
-  (l: loc)
+  (l: aloc)
 : Lemma
   (~ (loc_diff l l))
 = ()
 
 let loc_diff_sym
-  (l1 l2: loc)
+  (l1 l2: aloc)
 : Lemma
   (requires (loc_diff l1 l2))
   (ensures (loc_diff l2 l1))
 = ()
 
 let modifies_locs_in_region_sel
+  (#a: Type)
   (r: rid)
-  (ls: TSet.set loc {(forall (l: loc {TSet.mem l ls}) . r == loc_region l)})
+  (ls: TSet.set aloc {(forall (l: aloc {TSet.mem l ls}) . r == loc_region l)})
   (h h': mem)
-  (l: loc)
+  (l: loc a)
 : Lemma
   (requires (modifies_locs_in_region r ls h h' /\ contains h l /\ r == loc_region l /\ (
-    forall (l' : loc { TSet.mem l' ls } ) .
+    forall (l' : aloc { TSet.mem l' ls } ) .
     loc_diff l l'
   )))
   (ensures (sel h' l == sel h l))
 = assert (forall
-    (l': loc)
+    (l': aloc)
     . (
       TSet.mem l' ls /\
       r == loc_region l' /\
@@ -414,24 +429,26 @@ let modifies_locs_in_region_sel
 
 unfold
 let upd_post
+  (#a: Type)
   (h0: mem)
-  (r: loc { live_region h0 (loc_region r) } )
-  (v: loc_type r)
+  (r: loc a { live_region h0 (loc_region r) } )
+  (v: a)
 : GTot Type0
 = modifies_regions (Set.singleton (loc_region r)) h0 (upd h0 r v) /\
   modifies_locs_in_region (loc_region r) (TSet.singleton r) h0 (upd h0 r v)
 
 let upd_post_intro
+  (#a: Type)
   (h0: mem)
-  (r: loc { live_region h0 (loc_region r) } )
-  (v: loc_type r)
+  (r: loc a { live_region h0 (loc_region r) } )
+  (v: a)
 : Lemma (upd_post h0 r v)
   [SMTPat (upd h0 r v)]
 = assume (contains h0 r)
 
 abstract
 let loc_mm
-  (l: loc)
+  (l: aloc)
 : GTot bool
 = HS.is_mm (as_reference l)
 
@@ -456,7 +473,7 @@ let iseq_not_mm
 = ()
 
 let recall
-  (l: loc)
+  (l: aloc)
 : Stack unit
   (requires (fun _ -> (is_eternal_region (loc_region l) /\ (~ (loc_mm l)))))
   (ensures (fun m0 _ m1 -> m0 == m1 /\ m1 `contains` l))
@@ -466,7 +483,7 @@ let recall
 
 let weak_contains
   (m: mem)
-  (l: loc)
+  (l: aloc)
 : GTot Type0
 = HS.weak_contains m (as_reference l)
 
@@ -474,7 +491,7 @@ let weak_live_region = HS.weak_live_region
 
 let weak_live_region_not_mm_weak_contains
   (m: mem)
-  (l: loc)
+  (l: aloc)
 : Lemma
   (requires (weak_live_region m (loc_region l) /\ (~ (loc_mm l))))
   (ensures (weak_contains m l))
@@ -503,24 +520,26 @@ let weak_contains_iseq
 = ()
 
 unfold
-let read_post (r: loc) (m0: mem) (x: loc_type r) (m1: mem) =
+let read_post (#a: Type) (r: loc a) (m0: mem) (x: a) (m1: mem) =
   m1==m0 /\ x==sel m0 r
 
 let read
-  (l: loc)
-: ST (loc_type l)
+  (#a: Type)
+  (l: loc a)
+: ST a
   (requires (fun h -> weak_contains h l))
   (ensures (fun m0 x m1 -> read_post l m0 x m1))
 = Class?.read (Loc?.cl l) (Loc?.obj l)
 
 unfold
 let write_pre
-  (l: loc)
-  (v: loc_type l)
+  (#a: Type)
+  (l: loc a)
+  (v: a)
 = Class?.write_pre (Loc?.cl l) (Loc?.obj l) v
 
 unfold
-let write_post (r:loc) (v:loc_type r) m0 (_u:unit) m1 =
+let write_post (#a: Type) (r:loc a) (v: a) m0 (_u:unit) m1 =
   m0 `contains` r /\ m1 == upd m0 r v
 
 (*
@@ -549,8 +568,9 @@ let mref_write_pre
 *)
 
 let write
-  (l: loc)
-  (v: loc_type l)
+  (#a: Type)
+  (l: loc a)
+  (v: a)
 : ST unit
   (requires (fun h0 -> h0 `contains` l /\ write_pre l v h0))
   (ensures (write_post l v))
