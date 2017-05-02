@@ -73,7 +73,6 @@ type aloc = | Loc :
 
 let loc (a: Type) = (l: aloc { Class?.value (Loc?.cl l) == a } )
 
-unfold
 let ref_cl (a: Type): Tot class = Class
   (HS.reference a)
   a
@@ -88,7 +87,6 @@ let ref_cl (a: Type): Tot class = Class
 
 let ref (a: Type) : Tot Type = (l: loc a { Loc?.cl l == ref_cl a } )
 
-unfold
 let mref_cl (r: eternal_rid) (a: Type) (b: MR.reln a) : Tot class = Class
   (MR.m_rref r a b)
   a
@@ -648,3 +646,29 @@ let disjoint = HH.disjoint
 let parent = HH.parent
 let root = HH.root
 
+(* Allocators *)
+
+let monotonic = MR.monotonic
+let ralloc_post = ST.ralloc_post
+
+let alloc_mref
+  (#a:Type)
+  (#b:reln a)
+  (r:eternal_rid)
+  (init:a)
+: ST (mref r a b)
+  (requires (fun _ -> monotonic a b))
+  (ensures (fun h0 (m:mref r a b) h1 -> ralloc_post r init h0 (as_reference m) h1))
+= let x = MR.m_alloc #a #b r init in
+  Loc (mref_cl r a b) x
+
+let alloc_iseq
+  (#a:Type)
+  (p: (Seq.seq a -> Type))
+  (r: eternal_rid)
+  (init: Seq.seq a {p init})
+: ST (iseq r a p)
+     (requires (fun _ -> True))
+     (ensures (fun h0 m h1 -> ralloc_post r init h0 (as_reference m) h1))
+= let x = MS.alloc_mref_iseq p r init in
+  Loc (mref_cl r (s: Seq.seq a {p s}) grows) x

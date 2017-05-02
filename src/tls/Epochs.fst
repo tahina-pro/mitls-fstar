@@ -130,7 +130,6 @@ noeq type epochs (r:rgn) (n:random) = | MkEpochs:
 let containsT (#r:rgn) (#n:random) (es:epochs r n) (h: Mem.mem) =
     Mem.contains h (MkEpochs?.es es) 
 
-assume
 val alloc_log_and_ctrs: #a:Type0 -> #p:(seq a -> Type0) -> r:rgn ->
   ST (is:Mem.iseq r a p & c1:epoch_ctr r is & c2:epoch_ctr r is)
     (requires (fun h -> p Seq.createEmpty))
@@ -142,17 +141,14 @@ val alloc_log_and_ctrs: #a:Type0 -> #p:(seq a -> Type0) -> r:rgn ->
       Mem.contains h1 c1 /\
       Mem.contains h1 c2 /\ 
       Mem.sel h1 is == Seq.createEmpty)))
-(*
 let alloc_log_and_ctrs #a #p r =
   let init = Seq.createEmpty in
-  let is = alloc_mref_iseq p r init in
-  witness is (int_at_most (-1) is);
-  let c1 : epoch_ctr #a #p r is = m_alloc r (-1) in
-  let c2 : epoch_ctr #a #p r is = m_alloc r (-1) in
+  let is = Mem.alloc_iseq p r init in
+  Mem.witness is (Mem.int_at_most (-1) is);
+  let c1 : epoch_ctr #a #p r is = Mem.alloc_mref r (-1) in
+  let c2 : epoch_ctr #a #p r is = Mem.alloc_mref r (-1) in
   (| is, c1, c2 |)
-*)
 
-#reset-options "--z3rlimit 16"
 #reset-options "--z3rlimit 128"
 
 val incr_epoch_ctr :
@@ -175,18 +171,15 @@ let incr_epoch_ctr #a #p #r #is ctr =
   Mem.witness is (Mem.int_at_most (cur + 1) is);
   Mem.write ctr (cur + 1)
        
-assume
 val create: r:rgn -> n:random -> ST (epochs r n)
     (requires (fun h -> True))
     (ensures (fun h0 x h1 ->
       Mem.modifies_regions (Set.singleton r) h0 h1 /\ 
       Mem.modifies_locs_in_region r TSet.empty h0 h1
     ))
-(*
 let create (r:rgn) (n:random) =
   let (| esref, c1, c2 |) = alloc_log_and_ctrs #(epoch r n) #(epochs_inv #r #n) r in
   MkEpochs esref c1 c2
-*)
 
 unfold let incr_pre #r #n (es:epochs r n) (proj:(es:epochs r n -> Tot (epoch_ctr r (MkEpochs?.es es)))) h : GTot Type0 =
   let ctr = proj es in
