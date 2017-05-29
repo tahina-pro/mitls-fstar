@@ -48,6 +48,11 @@ let tagged m =
 - support abstract plaintexts and multiple epochs 
 *)
 
+(* TODO: TR: reintegrate into the valid_transcript invariant
+let associated_to_pv (pv:option protocolVersion) (msg:hs_msg) : GTot bool  =
+  if Certificate? msg || ClientKeyExchange? msg then Some? pv else true
+*)
+
 let weak_valid_transcript hsl =
     match hsl with
     | [] -> true
@@ -66,8 +71,8 @@ let rec gforall (#a: Type) (f: (a -> GTot bool)) (l: list a) : GTot bool =
   | x :: q -> f x && gforall f q
 
 let valid_transcript hsl : GTot bool =
-  weak_valid_transcript hsl &&
-  gforall (valid_hs_msg_prop (transcript_version hsl)) hsl
+  weak_valid_transcript hsl
+(* TODO: TR: (re)integrate version-specific validity constraints? *)
 
 let hs_transcript: Type0 = l:list msg {valid_transcript l}
 

@@ -65,7 +65,7 @@ private let recvHSRecord tcp pv kex =
       h
   in
   IO.print_string ("Received HS(" ^ (string_of_handshakeMessage hs_msg) ^ ")\n");
-  let logged = handshakeMessageBytes (Some pv) hs_msg in
+  let logged = handshakeMessageBytes hs_msg in
   IO.print_string ("Logged message = Parsed message? ");
   if (Platform.Bytes.equalBytes logged to_log) then IO.print_string "yes\n"
   else IO.print_string "no\n";
@@ -90,7 +90,7 @@ private let recvEncHSRecord tcp pv kex rd =
     | h::rem -> enc_hsbuf := rem; h
     in
   IO.print_string ("Received HS(" ^ (string_of_handshakeMessage hs_msg) ^ ")\n");
-  let logged = handshakeMessageBytes (Some pv) hs_msg in
+  let logged = handshakeMessageBytes hs_msg in
   IO.print_string ("Logged message = Parsed message? ");
   if (Platform.Bytes.equalBytes logged to_log) then IO.print_string "yes\n"
   else IO.print_string "no\n";
@@ -359,7 +359,7 @@ let client_13 config host port : ML unit =
 
   let cvd = KeySchedule.ks_client_13_client_finished ks in
   let cfin = {fin_vd = cvd} in
-  let cfinb = HandshakeMessages.handshakeMessageBytes (Some pv) (Finished cfin) in
+  let cfinb = HandshakeMessages.handshakeMessageBytes (Finished cfin) in
   let _ = lg @@ (Finished cfin) in
 
   IO.print_string "before encrypt \n";
@@ -373,7 +373,7 @@ let client_13 config host port : ML unit =
   ()
 
 private let sendEncHSRecord tcp pv msg wr =
-  let hs = HandshakeMessages.handshakeMessageBytes (Some pv) msg in
+  let hs = HandshakeMessages.handshakeMessageBytes msg in
   let er = encryptRecord wr Content.Handshake hs in
   sendRecordE true tcp pv Content.Application_data er
 

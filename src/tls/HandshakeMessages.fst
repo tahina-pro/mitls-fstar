@@ -146,14 +146,14 @@ let bindersLen_of_ch ch =
 // ServerHello: supporting two different syntaxes depending on the embedded pv
 // https://tools.ietf.org/html/rfc5246#section-7.4.1.2
 // https://tlswg.github.io/tls13-spec/#rfc.section.4.1.3
-noeq type sh = {
-  sh_protocol_version: protocolVersion;
-  sh_server_random: TLSInfo.random;
-  sh_sessionID: option sessionID;  // omitted in TLS 1.3
-  sh_cipher_suite: valid_cipher_suite;
-  sh_compression: option compression; // omitted in TLS 1.3
-  sh_extensions: option (se:list extension{List.Tot.length se < 256});
-}
+noeq type sh = | Mk_sh:
+  (sh_protocol_version: protocolVersion) ->
+  (sh_server_random: TLSInfo.random) ->
+  (sh_sessionID: option sessionID { if sh_protocol_version = TLS_1p3 then None? sh_sessionID else Some? sh_sessionID } ) ->  // omitted in TLS 1.3
+  (sh_cipher_suite: valid_cipher_suite) ->
+  (sh_compression: option compression { if sh_protocol_version = TLS_1p3 then None? sh_compression else Some? sh_compression } ) -> // omitted in TLS 1.3
+  (sh_extensions: option (se:list extension{List.Tot.length se < 256})) ->
+  sh
 
 (* Hello retry request *)
 noeq type hrr = {
@@ -177,8 +177,11 @@ noeq type sticket13 = {
   ticket13_extensions: es: list extension;
 }
 
-type ee = l:list extension{List.Tot.length l < 256}
-
+type ee = l: extensions {
+  List.Tot.length l < 256 /\
+  length (extensionListBytes l) + bindersLen l < 65536 /\ // necessary for extensionsBytes
+  repr_bytes (length (extensionsBytes l)) <= 3
+}
 
 (** CertificateRequest for TLS 1.0-1.2
  https://tools.ietf.org/html/rfc2246#section-7.4.4
@@ -194,11 +197,11 @@ type cr13 = cr //17-05-05 TBC
 
 // Certificate payloads (the format changed deeply)
 noeq type crt = {
-  crt_chain: Cert.chain
+  crt_chain: (c: Cert.chain { length (Cert.certificateListBytes c) < 16777212 } ) ;
 }
 noeq type crt13 = {
   crt_request_context: b:bytes {length b <= 255};
-  crt_chain13: Cert.chain13;
+  crt_chain13: (c: Cert.chain13 { length (Cert.certificateListBytes13 c) < 16777212 } ) ;
 }
 
 noeq type kex_s =
@@ -899,13 +902,13 @@ let parseServerHello data =
                      | Some l -> List.Tot.length l < 256)
                  then
                    let exts = coercion_helper exts in
-                   correct ({
-                     sh_protocol_version = serverVer;
-                     sh_server_random = serverRandomBytes;
-                     sh_sessionID = None;
-                     sh_cipher_suite = cs;
-                     sh_compression = None;
-                     sh_extensions = exts})
+                   correct (Mk_sh
+                     (* sh_protocol_version = *) serverVer
+                     (* sh_server_random = *) serverRandomBytes
+                     (* sh_sessionID = *) None
+                     (* sh_cipher_suite = *) cs
+                     (* sh_compression = *) None
+                     (* sh_extensions = *) exts)
                  else
                     Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")))
          else
@@ -936,13 +939,13 @@ let parseServerHello data =
                                  | Some l -> List.Tot.length l < 256)
                              then
                                let exts = coercion_helper exts in
-                               correct ({
-                                 sh_protocol_version = serverVer;
-                                 sh_server_random = serverRandomBytes;
-                                 sh_sessionID = Some sid;
-                                 sh_cipher_suite = cs;
-                                 sh_compression = Some NullCompression;
-                                 sh_extensions = exts})
+                               correct (Mk_sh
+                                 (* sh_protocol_version = *) serverVer
+                                 (* sh_server_random = *) serverRandomBytes
+                                 (* sh_sessionID = *) (Some sid)
+                                 (* sh_cipher_suite = *) cs
+                                 (* sh_compression = *) (Some NullCompression)
+                                 (* sh_extensions = *) exts)
                              else Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ ""))))
                else Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
              else Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
@@ -1708,35 +1711,15 @@ let parseNextProtocol payload =
   else Error (AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
   else Error (AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
 *)
-let associated_to_pv (pv:option protocolVersion) (msg:hs_msg) : GTot bool  =
-  if Certificate? msg || ClientKeyExchange? msg then Some? pv else true
-
-let valid_hs_msg_prop (pv: option protocolVersion) (msg: hs_msg): GTot bool =
-  associated_to_pv pv msg && (
-  match msg with
-  | EncryptedExtensions ee -> repr_bytes (length (extensionsBytes ee)) <= 3
-  | ServerHello sh -> (
-      if sh.sh_protocol_version = TLS_1p3
-      then (None? sh.sh_sessionID && None? sh.sh_compression)
-      else (Some? sh.sh_sessionID && Some? sh.sh_compression))
-  | Certificate13 crt -> length (Cert.certificateListBytes13 crt.crt_chain13) < 16777212
-  | Certificate crt -> length (Cert.certificateListBytes crt.crt_chain) < 16777212
-  | _ -> true )
-
-let valid_hs_msg (pv: option protocolVersion): Type0 = msg: hs_msg{
-  valid_hs_msg_prop pv msg
-}
-
 
 let parsed = function
   | Binders _ | MessageHash _ -> false
   | _ -> true
 
 val handshakeMessageBytes:
-  pvo: option protocolVersion ->
-  msg:valid_hs_msg pvo ->
+  msg:hs_msg ->
   Tot (b:bytes {parsed msg ==> (exists (ht:handshakeType). hs_msg_bytes ht b)})
-let handshakeMessageBytes pvo = function
+let handshakeMessageBytes = function
   | ClientHello ch -> clientHelloBytes ch
   | ServerHello sh -> serverHelloBytes sh
   | Certificate c -> certificateBytes c
@@ -1777,13 +1760,13 @@ let splitHandshakeMessage b =
 //#set-options "--lax"
 
 //17-05-05 update this proof, relying on pv to disambiguate messages with the same header
-val handshakeMessageBytes_is_injective: pv:option protocolVersion -> msg1:valid_hs_msg pv -> msg2:valid_hs_msg pv ->
+val handshakeMessageBytes_is_injective: msg1:hs_msg -> msg2:hs_msg ->
   Lemma (requires True)
-  (ensures (Seq.equal (handshakeMessageBytes pv msg1) (handshakeMessageBytes pv msg2) ==> msg1 = msg2))
-let handshakeMessageBytes_is_injective pv msg1 msg2 =
-  if handshakeMessageBytes pv msg1 = handshakeMessageBytes pv msg2 then (
-    let bytes1 = handshakeMessageBytes pv msg1 in
-    let bytes2 = handshakeMessageBytes pv msg2 in
+  (ensures (Seq.equal (handshakeMessageBytes msg1) (handshakeMessageBytes msg2) ==> msg1 = msg2))
+let handshakeMessageBytes_is_injective msg1 msg2 =
+  if handshakeMessageBytes msg1 = handshakeMessageBytes msg2 then (
+    let bytes1 = handshakeMessageBytes msg1 in
+    let bytes2 = handshakeMessageBytes msg2 in
     let ht1,data1 = splitHandshakeMessage bytes1 in
     let ht2,data2 = splitHandshakeMessage bytes2 in
     messageBytes_is_injective ht1 data1 ht2 data2;
@@ -1806,31 +1789,31 @@ let handshakeMessageBytes_is_injective pv msg1 msg2 =
     //| HT_next_protocol -> nextProtocolBytes_is_injective (NextProtocol?._0 msg1) (NextProtocol?._0 msg2)
   )
 
-val handshakeMessagesBytes: pv:option protocolVersion -> list (msg:valid_hs_msg pv) -> Tot bytes
-let rec handshakeMessagesBytes pv hsl =
+val handshakeMessagesBytes: list (msg:hs_msg) -> Tot bytes
+let rec handshakeMessagesBytes hsl =
     match hsl with
     | [] -> empty_bytes
-    | h::t -> handshakeMessageBytes pv h @| handshakeMessagesBytes pv t
+    | h::t -> handshakeMessageBytes h @| handshakeMessagesBytes t
 
 #reset-options
 
-let lemma_handshakeMessagesBytes_def (pv:option protocolVersion) (li:list (msg:valid_hs_msg pv){Cons? li}) : Lemma (handshakeMessagesBytes pv li = ((handshakeMessageBytes pv (Cons?.hd li)) @| (handshakeMessagesBytes pv (Cons?.tl li)))) = ()
+let lemma_handshakeMessagesBytes_def (li:list (msg:hs_msg){Cons? li}) : Lemma (handshakeMessagesBytes li = ((handshakeMessageBytes (Cons?.hd li)) @| (handshakeMessagesBytes (Cons?.tl li)))) = ()
 
-let lemma_handshakeMessagesBytes_def2 (pv:option protocolVersion) (li:list (msg:valid_hs_msg pv){Nil? li}) : Lemma (handshakeMessagesBytes pv li = empty_bytes) = ()
+let lemma_handshakeMessagesBytes_def2 (li:list (msg:hs_msg){Nil? li}) : Lemma (handshakeMessagesBytes li = empty_bytes) = ()
 
-val lemma_handshakeMessageBytes_aux: pv:option protocolVersion -> msg1:valid_hs_msg pv -> msg2:valid_hs_msg pv ->
-  Lemma (requires (let b1 = handshakeMessageBytes pv msg1 in
-           let b2 = handshakeMessageBytes pv msg2 in
+val lemma_handshakeMessageBytes_aux: msg1:hs_msg -> msg2:hs_msg ->
+  Lemma (requires (let b1 = handshakeMessageBytes msg1 in
+           let b2 = handshakeMessageBytes msg2 in
            length b2 >= length b1
            /\ Seq.equal b1 (Seq.slice b2 0 (length b1))))
-  (ensures (Seq.equal (handshakeMessageBytes pv msg1) (handshakeMessageBytes pv msg2)))
+  (ensures (Seq.equal (handshakeMessageBytes msg1) (handshakeMessageBytes msg2)))
 
 #reset-options "--z3rlimit 50"
 //#set-options "--lax"
 
-let lemma_handshakeMessageBytes_aux pv msg1 msg2 =
-  let payload1 = handshakeMessageBytes pv msg1 in
-  let payload2 = handshakeMessageBytes pv msg2 in
+let lemma_handshakeMessageBytes_aux msg1 msg2 =
+  let payload1 = handshakeMessageBytes msg1 in
+  let payload2 = handshakeMessageBytes msg2 in
   let ht1, data1 = splitHandshakeMessage payload1 in
   let ht2, data2 = splitHandshakeMessage payload2 in
   cut (payload1 = (htBytes ht1 @| vlbytes 3 data1));
@@ -1849,79 +1832,86 @@ let lemma_handshakeMessageBytes_aux pv msg1 msg2 =
   Seq.lemma_eq_intro (Seq.slice payload2 0 (length payload1)) payload2;
   lemma_append_inj (htBytes ht1) (vlbytes 3 data1) (htBytes ht2) (vlbytes 3 data2)
 
-#reset-options
+// BEGIN TR the following proofs successfully verify
+// #reset-options
+
+let lemma_aux_1_aux (a:bytes) (b:bytes) (c:bytes) (d:bytes) : Lemma
+  (requires (Seq.equal (a @| b) (c @| d) /\ length a >= length c))
+  (ensures ((length a >= length c /\ Seq.equal (Seq.slice a 0 (length c)) c)))
+ = let l = length c in
+   let a1 = Seq.slice a 0 l in
+   let a2 = Seq.slice a l (length a) in
+// assert (Seq.equal a (Seq.append a1 a2));
+   append_assoc a1 a2 b;
+   lemma_append_inj a1 (a2 @| b) c d
 
 let lemma_aux_1 (a:bytes) (b:bytes) (c:bytes) (d:bytes) : Lemma
   (requires (Seq.equal (a @| b) (c @| d)))
   (ensures ((length a >= length c ==> Seq.equal (Seq.slice a 0 (length c)) c)
       /\ (length a < length c ==> Seq.equal (Seq.slice c 0 (length a)) a)))
  = if length a >= length c then (
-     cut (Seq.equal (a @| b) (c @| d));
-     cut (forall (i:nat). {:pattern (Seq.index (a@|b) i) \/ (Seq.index (c@|d) i)} i < length (a@|b) ==> Seq.index (a@|b) i = Seq.index (c@|d) i);
-     cut (length a <= length (a@|b) /\ length c <= length (a@|b));
-     ()
+      lemma_aux_1_aux a b c d
      )
    else (
-     cut (Seq.equal (a @| b) (c @| d));
-     cut (forall (i:nat). {:pattern (Seq.index (a@|b) i) \/ (Seq.index (c@|d) i)} i < length (a@|b) ==> Seq.index (a@|b) i = Seq.index (c@|d) i);
-     cut (length a <= length (a@|b) /\ length c <= length (a@|b));
-     ()
+      lemma_aux_1_aux c d a b
   )
 
 let lemma_op_At_Bar_def (b:bytes) (b':bytes) : Lemma (requires True) (ensures ((b@|b') = Seq.append b b')) = ()
 
-let lemma_handshakeMessageBytes_min_length (pv:option protocolVersion) (msg:valid_hs_msg pv) : Lemma (length (handshakeMessageBytes pv msg) >= 4) = ()
+let lemma_handshakeMessageBytes_min_length (msg:hs_msg) : Lemma (length (handshakeMessageBytes msg) >= 4) = ()
 
-let lemma_aux_2 (pv:option protocolVersion) (l:list (msg:valid_hs_msg pv)) :
+let lemma_aux_2 (l:list (msg:hs_msg)) :
   Lemma (requires (Cons? l))
-  (ensures (length (handshakeMessagesBytes pv l) > 0))
+  (ensures (length (handshakeMessagesBytes l) > 0))
   = ()
 
 let lemma_aux_3 (b:bytes) (b':bytes) : Lemma (requires (length b <> length b'))
               (ensures (~(Seq.equal b b'))) = ()
 
-val handshakeMessagesBytes_is_injective: pv:option protocolVersion -> l1:list (msg:valid_hs_msg pv) -> l2:list (msg:valid_hs_msg pv) ->
+// END TR
+
+val handshakeMessagesBytes_is_injective: l1:list (msg:hs_msg) -> l2:list (msg:hs_msg) ->
   Lemma (requires True)
-  (ensures (Seq.equal (handshakeMessagesBytes pv l1) (handshakeMessagesBytes pv l2) ==> l1 = l2))
-let rec handshakeMessagesBytes_is_injective pv l1 l2 =
+  (ensures (Seq.equal (handshakeMessagesBytes l1) (handshakeMessagesBytes l2) ==> l1 = l2))
+let rec handshakeMessagesBytes_is_injective l1 l2 =
   match l1, l2 with
   | [], [] -> ()
   | hd::tl, hd'::tl' -> ();
-      let payload1 = handshakeMessagesBytes pv l1 in
-      lemma_handshakeMessagesBytes_def pv l1;
-      cut (Seq.equal ((handshakeMessageBytes pv hd) @| (handshakeMessagesBytes pv tl)) payload1);
-      lemma_op_At_Bar_def (handshakeMessageBytes pv hd) (handshakeMessagesBytes pv tl);
-      let payload2 = handshakeMessagesBytes pv l2 in
-      lemma_handshakeMessagesBytes_def pv l2;
-      cut (Seq.equal ((handshakeMessageBytes pv hd') @| (handshakeMessagesBytes pv tl')) payload2);
-      lemma_op_At_Bar_def (handshakeMessageBytes pv hd') (handshakeMessagesBytes pv tl');
+      let payload1 = handshakeMessagesBytes l1 in
+      lemma_handshakeMessagesBytes_def l1;
+      cut (Seq.equal ((handshakeMessageBytes hd) @| (handshakeMessagesBytes tl)) payload1);
+      lemma_op_At_Bar_def (handshakeMessageBytes hd) (handshakeMessagesBytes tl);
+      let payload2 = handshakeMessagesBytes l2 in
+      lemma_handshakeMessagesBytes_def l2;
+      cut (Seq.equal ((handshakeMessageBytes hd') @| (handshakeMessagesBytes tl')) payload2);
+      lemma_op_At_Bar_def (handshakeMessageBytes hd') (handshakeMessagesBytes tl');
       if payload1 = payload2 then (
-  cut (Seq.equal (Seq.append (handshakeMessageBytes pv hd) (handshakeMessagesBytes pv tl))
-           (Seq.append (handshakeMessageBytes pv hd') (handshakeMessagesBytes pv tl')));
-  cut (Seq.equal ((handshakeMessageBytes pv hd) @| (handshakeMessagesBytes pv tl)) ((handshakeMessageBytes pv hd') @| (handshakeMessagesBytes pv tl')));
-  if length (handshakeMessageBytes pv hd) >= length (handshakeMessageBytes pv hd')
+  cut (Seq.equal (Seq.append (handshakeMessageBytes hd) (handshakeMessagesBytes tl))
+           (Seq.append (handshakeMessageBytes hd') (handshakeMessagesBytes tl')));
+  cut (Seq.equal ((handshakeMessageBytes hd) @| (handshakeMessagesBytes tl)) ((handshakeMessageBytes hd') @| (handshakeMessagesBytes tl')));
+  if length (handshakeMessageBytes hd) >= length (handshakeMessageBytes hd')
   then (
-    lemma_aux_1 (handshakeMessageBytes pv hd) (handshakeMessagesBytes pv tl) (handshakeMessageBytes pv hd') (handshakeMessagesBytes pv tl');
-    lemma_handshakeMessageBytes_aux pv hd' hd
+    lemma_aux_1 (handshakeMessageBytes hd) (handshakeMessagesBytes tl) (handshakeMessageBytes hd') (handshakeMessagesBytes tl');
+    lemma_handshakeMessageBytes_aux hd' hd
     )
   else (
-    lemma_aux_1 (handshakeMessageBytes pv hd) (handshakeMessagesBytes pv tl) (handshakeMessageBytes pv hd') (handshakeMessagesBytes pv tl');
-    lemma_handshakeMessageBytes_aux pv hd hd'
+    lemma_aux_1 (handshakeMessageBytes hd) (handshakeMessagesBytes tl) (handshakeMessageBytes hd') (handshakeMessagesBytes tl');
+    lemma_handshakeMessageBytes_aux hd hd'
   );
-  lemma_append_inj (handshakeMessageBytes pv hd) (handshakeMessagesBytes pv tl) (handshakeMessageBytes pv hd') (handshakeMessagesBytes pv tl');
-  handshakeMessageBytes_is_injective pv hd hd';
-  handshakeMessagesBytes_is_injective pv tl tl';
+  lemma_append_inj (handshakeMessageBytes hd) (handshakeMessagesBytes tl) (handshakeMessageBytes hd') (handshakeMessagesBytes tl');
+  handshakeMessageBytes_is_injective hd hd';
+  handshakeMessagesBytes_is_injective tl tl';
   ()
     )
   | [],hd::tl -> (
-      lemma_handshakeMessagesBytes_def2 pv l1;
-      lemma_aux_2 pv l2;
-      lemma_aux_3 (handshakeMessagesBytes pv l1) (handshakeMessagesBytes pv l2)
+      lemma_handshakeMessagesBytes_def2 l1;
+      lemma_aux_2 l2;
+      lemma_aux_3 (handshakeMessagesBytes l1) (handshakeMessagesBytes l2)
     )
   | hd::tl, [] -> (
-      lemma_handshakeMessagesBytes_def2 pv l2;
-      lemma_aux_2 pv l1;
-      lemma_aux_3 (handshakeMessagesBytes pv l1) (handshakeMessagesBytes pv l2)
+      lemma_handshakeMessagesBytes_def2 l2;
+      lemma_aux_2 l1;
+      lemma_aux_3 (handshakeMessagesBytes l1) (handshakeMessagesBytes l2)
     )
 
 val string_of_handshakeMessage: hs_msg -> Tot string

@@ -89,42 +89,8 @@ let print_hsl (hsl:erased_transcript) : Tot bool =
     IO.debug_print_string ("Current log: " ^ s)
     else false
 
-(* TODO: move to something like List.GTot *)
-let rec gforall_list_to_list_refined
-  (#a: Type)
-  (f: (a -> GTot bool))
-  (l: list a { gforall f l } )
-: Tot (l': list (x: a {f x}))
-= match l with
-  | [] -> []
-  | x :: q -> x :: gforall_list_to_list_refined f q
-
-let rec valid_transcript_to_list_valid_hs_msg_aux
-  (v: option protocolVersion)
-  (l: list hs_msg { gforall (valid_hs_msg_prop v) l } )
-: Tot (list (valid_hs_msg v))
-=
-(* FIXME: WHY WHY WHY can this not be defined as:
-   gforall_list_to_list_refined (valid_hs_msg_prop v) l
-*)
-  match l with
-  | [] -> []
-  | a :: q -> a :: valid_transcript_to_list_valid_hs_msg_aux v q
-
-let rec valid_transcript_to_list_valid_hs_msg_aux_inj
-  (v: option protocolVersion)
-  (l1: list hs_msg { gforall (valid_hs_msg_prop v) l1 } )
-  (l2: list hs_msg { gforall (valid_hs_msg_prop v) l2 } )
-: Lemma
-  (requires (valid_transcript_to_list_valid_hs_msg_aux v l1 == valid_transcript_to_list_valid_hs_msg_aux v l2))
-  (ensures (l1 == l2))
-= match l1, l2 with
-  | _ :: q1, _ :: q2 -> valid_transcript_to_list_valid_hs_msg_aux_inj v q1 q2
-  | _ -> ()
-
 let transcript_bytes l =
-  let v = transcript_version l in
-  handshakeMessagesBytes v (valid_transcript_to_list_valid_hs_msg_aux v l)
+  handshakeMessagesBytes l
 
 #set-options "--z3rlimit 64"
 
@@ -133,23 +99,7 @@ let transcript_format_injective ms0 ms1 =
   : Lemma
     (requires (Seq.equal (transcript_bytes ms0) (transcript_bytes ms1)))
     (ensures (ms0 == ms1))
-  = match ms0 with
-    | [] -> ()
-    | ClientHello ch0 :: q0 ->
-      let v = transcript_version ms0 in
-      let (ClientHello ch1 :: q1) = ms1 in
-      let v1 = transcript_version ms1 in
-      let l0 = handshakeMessagesBytes v (valid_transcript_to_list_valid_hs_msg_aux v q0) in
-      let l1 = handshakeMessagesBytes v1 (valid_transcript_to_list_valid_hs_msg_aux v1 q1) in
-      clientHelloBytes_is_injective_strong ch0 l0 ch1 l1;
-      begin match q0 with
-      | [] -> ()
-      | ServerHello sh0 :: q0' ->
-        let (ServerHello sh1 :: q1') = q1 in
-        serverHelloBytes_is_injective_strong sh0 (handshakeMessagesBytes v (valid_transcript_to_list_valid_hs_msg_aux v q0')) sh1 (handshakeMessagesBytes v1 (valid_transcript_to_list_valid_hs_msg_aux v1 q1'));
-        handshakeMessagesBytes_is_injective v (valid_transcript_to_list_valid_hs_msg_aux v ms0) (valid_transcript_to_list_valid_hs_msg_aux v ms1);
-        valid_transcript_to_list_valid_hs_msg_aux_inj v ms0 ms1
-      end
+  = handshakeMessagesBytes_is_injective ms0 ms1
   in
   Classical.move_requires f ()
 
@@ -291,7 +241,7 @@ let getHash #ha (LOG #reg st) =
 let send l m =
   trace ("emit "^HandshakeMessages.string_of_handshakeMessage m);
   let st = !l in
-  let mb = handshakeMessageBytes st.pv m in
+  let mb = handshakeMessageBytes m in
   let h : hashState st.transcript (st.parsed @ [m]) =
     match st.hashes with
     | FixedHash a acc hl ->
@@ -323,7 +273,7 @@ let hash_tag_truncated #a l len =
 let send_tag #a l m =
   trace ("emit "^HandshakeMessages.string_of_handshakeMessage m^" and hash");
   let st = !l in
-  let mb = handshakeMessageBytes st.pv m in
+  let mb = handshakeMessageBytes m in
   let (h,tg) : (hashState st.transcript (st.parsed @ [m]) * anyTag) =
     match st.hashes with
     | FixedHash a' acc hl ->
@@ -345,7 +295,7 @@ let send_tag #a l m =
 
 let send_CCS_tag #a l m cf =
   let st = !l in
-  let mb = handshakeMessageBytes st.pv m in
+  let mb = handshakeMessageBytes m in
   let (h,tg) : (hashState st.transcript (st.parsed @ [m]) * anyTag) =
     match st.hashes with
     | FixedHash a acc hl ->
