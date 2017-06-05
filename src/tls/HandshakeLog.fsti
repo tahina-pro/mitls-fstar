@@ -66,8 +66,7 @@ let rec gforall (#a: Type) (f: (a -> GTot bool)) (l: list a) : GTot bool =
   | x :: q -> f x && gforall f q
 
 let valid_transcript hsl : GTot bool =
-  weak_valid_transcript hsl &&
-  gforall (valid_hs_msg_prop (transcript_version hsl)) hsl
+  weak_valid_transcript hsl
 
 let hs_transcript: Type0 = l:list msg {valid_transcript l}
 

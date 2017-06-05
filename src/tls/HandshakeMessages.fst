@@ -145,14 +145,22 @@ let bindersLen_of_ch ch =
 // ServerHello: supporting two different syntaxes depending on the embedded pv
 // https://tools.ietf.org/html/rfc5246#section-7.4.1.2
 // https://tlswg.github.io/tls13-spec/#rfc.section.4.1.3
-noeq type sh = {
-  sh_protocol_version: protocolVersion;
-  sh_server_random: TLSInfo.random;
-  sh_sessionID: option sessionID;  // omitted in TLS 1.3
-  sh_cipher_suite: valid_cipher_suite;
-  sh_compression: option compression; // omitted in TLS 1.3
-  sh_extensions: option (se:list extension{List.Tot.length se < 256});
-}
+noeq type sh = | Mk_sh:
+  (sh_protocol_version: protocolVersion) ->
+  (sh_server_random: TLSInfo.random) ->
+  (sh_sessionID: option sessionID {
+    if sh_protocol_version = TLS_1p3
+    then None? sh_sessionID
+    else Some? sh_sessionID
+  }) -> // omitted in TLS 1.3
+  (sh_cipher_suite: valid_cipher_suite) ->
+  (sh_compression: option compression {
+    if sh_protocol_version = TLS_1p3
+    then None? sh_compression
+    else Some? sh_compression
+  }) -> // omitted in TLS 1.3
+  (sh_extensions: option (se:list extension{List.Tot.length se < 256})) ->
+  sh
 
 (* Hello retry request *)
 noeq type hrr = {
@@ -176,7 +184,11 @@ noeq type sticket13 = {
   ticket13_extensions: es: list extension;
 }
 
-type ee = l:list extension{List.Tot.length l < 256}
+type ee = l: extensions { // necessary for extensionsBytes
+  List.Tot.length l < 256 /\
+  length (extensionListBytes l) + bindersLen l < 65536 /\ // necessary for extensionsBytes
+  repr_bytes (length (extensionsBytes l)) <= 3 // come from former valid_hs_msg
+}
 
 
 (** CertificateRequest for TLS 1.0-1.2
@@ -193,11 +205,11 @@ type cr13 = cr //17-05-05 TBC
 
 // Certificate payloads (the format changed deeply)
 noeq type crt = {
-  crt_chain: Cert.chain
+  crt_chain: (crt_chain: Cert.chain { length (Cert.certificateListBytes crt_chain) < 16777212 } )
 }
 noeq type crt13 = {
   crt_request_context: b:bytes {length b <= 255};
-  crt_chain13: Cert.chain13;
+  crt_chain13: (crt_chain13: Cert.chain13 { length (Cert.certificateListBytes13 crt_chain13) < 16777212 } )
 }
 
 noeq type kex_s =
@@ -896,13 +908,14 @@ let parseServerHello data =
                      | Some l -> List.Tot.length l < 256)
                  then
                    let exts = coercion_helper exts in
-                   correct ({
-                     sh_protocol_version = serverVer;
-                     sh_server_random = serverRandomBytes;
-                     sh_sessionID = None;
-                     sh_cipher_suite = cs;
-                     sh_compression = None;
-                     sh_extensions = exts})
+                   correct (Mk_sh
+                     (* sh_protocol_version = *) serverVer
+                     (* sh_server_random = *) serverRandomBytes
+                     (* sh_sessionID = *) None
+                     (* sh_cipher_suite = *) cs
+                     (* sh_compression = *) None
+                     (* sh_extensions = *) exts
+                  )
                  else
                     Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")))
          else
@@ -933,13 +946,14 @@ let parseServerHello data =
                                  | Some l -> List.Tot.length l < 256)
                              then
                                let exts = coercion_helper exts in
-                               correct ({
-                                 sh_protocol_version = serverVer;
-                                 sh_server_random = serverRandomBytes;
-                                 sh_sessionID = Some sid;
-                                 sh_cipher_suite = cs;
-                                 sh_compression = Some NullCompression;
-                                 sh_extensions = exts})
+                               correct (Mk_sh
+                                 (* sh_protocol_version = *) serverVer
+                                 (* sh_server_random = *) serverRandomBytes
+                                 (* sh_sessionID = *) (Some sid)
+                                 (* sh_cipher_suite = *) cs
+                                 (* sh_compression = *) (Some NullCompression)
+                                 (* sh_extensions = *) exts
+                               )
                              else Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ ""))))
                else Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
              else Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
@@ -1705,24 +1719,11 @@ let parseNextProtocol payload =
   else Error (AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
   else Error (AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
 *)
+
+(* TODO: TR: why are these necessary?
 let associated_to_pv (pv:option protocolVersion) (msg:hs_msg) : GTot bool  =
   if Certificate? msg || ClientKeyExchange? msg then Some? pv else true
-
-let valid_hs_msg_prop (pv: option protocolVersion) (msg: hs_msg): GTot bool =
-  associated_to_pv pv msg && (
-  match msg with
-  | EncryptedExtensions ee -> repr_bytes (length (extensionsBytes ee)) <= 3
-  | ServerHello sh -> (
-      if sh.sh_protocol_version = TLS_1p3
-      then (None? sh.sh_sessionID && None? sh.sh_compression)
-      else (Some? sh.sh_sessionID && Some? sh.sh_compression))
-  | Certificate13 crt -> length (Cert.certificateListBytes13 crt.crt_chain13) < 16777212
-  | Certificate crt -> length (Cert.certificateListBytes crt.crt_chain) < 16777212
-  | _ -> true )
-
-let valid_hs_msg (pv: option protocolVersion): Type0 = msg: hs_msg{
-  valid_hs_msg_prop pv msg
-}
+*)
 
 
 let parsed = function
@@ -1731,7 +1732,7 @@ let parsed = function
 
 val handshakeMessageBytes:
   pvo: option protocolVersion ->
-  msg:valid_hs_msg pvo ->
+  msg:hs_msg ->
   Tot (b:bytes {parsed msg ==> (exists (ht:handshakeType). hs_msg_bytes ht b)})
 let handshakeMessageBytes pvo = function
   | ClientHello ch -> clientHelloBytes ch
@@ -1774,7 +1775,7 @@ let splitHandshakeMessage b =
 //#set-options "--lax"
 
 //17-05-05 update this proof, relying on pv to disambiguate messages with the same header
-val handshakeMessageBytes_is_injective: pv:option protocolVersion -> msg1:valid_hs_msg pv -> msg2:valid_hs_msg pv ->
+val handshakeMessageBytes_is_injective: pv:option protocolVersion -> msg1:hs_msg -> msg2:hs_msg ->
   Lemma (requires True)
   (ensures (Seq.equal (handshakeMessageBytes pv msg1) (handshakeMessageBytes pv msg2) ==> msg1 = msg2))
 let handshakeMessageBytes_is_injective pv msg1 msg2 =
@@ -1803,7 +1804,7 @@ let handshakeMessageBytes_is_injective pv msg1 msg2 =
     //| HT_next_protocol -> nextProtocolBytes_is_injective (NextProtocol?._0 msg1) (NextProtocol?._0 msg2)
   )
 
-val handshakeMessagesBytes: pv:option protocolVersion -> list (msg:valid_hs_msg pv) -> Tot bytes
+val handshakeMessagesBytes: pv:option protocolVersion -> list (msg:hs_msg) -> Tot bytes
 let rec handshakeMessagesBytes pv hsl =
     match hsl with
     | [] -> empty_bytes
@@ -1811,11 +1812,11 @@ let rec handshakeMessagesBytes pv hsl =
 
 #reset-options
 
-let lemma_handshakeMessagesBytes_def (pv:option protocolVersion) (li:list (msg:valid_hs_msg pv){Cons? li}) : Lemma (handshakeMessagesBytes pv li = ((handshakeMessageBytes pv (Cons?.hd li)) @| (handshakeMessagesBytes pv (Cons?.tl li)))) = ()
+let lemma_handshakeMessagesBytes_def (pv:option protocolVersion) (li:list (msg:hs_msg){Cons? li}) : Lemma (handshakeMessagesBytes pv li = ((handshakeMessageBytes pv (Cons?.hd li)) @| (handshakeMessagesBytes pv (Cons?.tl li)))) = ()
 
-let lemma_handshakeMessagesBytes_def2 (pv:option protocolVersion) (li:list (msg:valid_hs_msg pv){Nil? li}) : Lemma (handshakeMessagesBytes pv li = empty_bytes) = ()
+let lemma_handshakeMessagesBytes_def2 (pv:option protocolVersion) (li:list (msg:hs_msg){Nil? li}) : Lemma (handshakeMessagesBytes pv li = empty_bytes) = ()
 
-val lemma_handshakeMessageBytes_aux: pv:option protocolVersion -> msg1:valid_hs_msg pv -> msg2:valid_hs_msg pv ->
+val lemma_handshakeMessageBytes_aux: pv:option protocolVersion -> msg1:hs_msg -> msg2:hs_msg ->
   Lemma (requires (let b1 = handshakeMessageBytes pv msg1 in
            let b2 = handshakeMessageBytes pv msg2 in
            length b2 >= length b1
@@ -1867,9 +1868,9 @@ let lemma_aux_1 (a:bytes) (b:bytes) (c:bytes) (d:bytes) : Lemma
 
 let lemma_op_At_Bar_def (b:bytes) (b':bytes) : Lemma (requires True) (ensures ((b@|b') = Seq.append b b')) = ()
 
-let lemma_handshakeMessageBytes_min_length (pv:option protocolVersion) (msg:valid_hs_msg pv) : Lemma (length (handshakeMessageBytes pv msg) >= 4) = ()
+let lemma_handshakeMessageBytes_min_length (pv:option protocolVersion) (msg:hs_msg) : Lemma (length (handshakeMessageBytes pv msg) >= 4) = ()
 
-let lemma_aux_2 (pv:option protocolVersion) (l:list (msg:valid_hs_msg pv)) :
+let lemma_aux_2 (pv:option protocolVersion) (l:list (msg:hs_msg)) :
   Lemma (requires (Cons? l))
   (ensures (length (handshakeMessagesBytes pv l) > 0))
   = ()
@@ -1877,7 +1878,7 @@ let lemma_aux_2 (pv:option protocolVersion) (l:list (msg:valid_hs_msg pv)) :
 let lemma_aux_3 (b:bytes) (b':bytes) : Lemma (requires (length b <> length b'))
               (ensures (~(Seq.equal b b'))) = ()
 
-val handshakeMessagesBytes_is_injective: pv:option protocolVersion -> l1:list (msg:valid_hs_msg pv) -> l2:list (msg:valid_hs_msg pv) ->
+val handshakeMessagesBytes_is_injective: pv:option protocolVersion -> l1:list (msg:hs_msg) -> l2:list (msg:hs_msg) ->
   Lemma (requires True)
   (ensures (Seq.equal (handshakeMessagesBytes pv l1) (handshakeMessagesBytes pv l2) ==> l1 = l2))
 let rec handshakeMessagesBytes_is_injective pv l1 l2 =

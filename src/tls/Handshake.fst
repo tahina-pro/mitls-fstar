@@ -533,13 +533,14 @@ let server_ServerHelloDone hs =
 let serverHello (m:Nego.mode) =
   let open Nego in
   let pv = m.n_protocol_version in
-  ServerHello ({
-    sh_protocol_version = pv;
-    sh_server_random = m.n_server_random;
-    sh_sessionID = m.n_sessionID;
-    sh_cipher_suite = m.n_cipher_suite;
-    sh_compression = if pv = TLS_1p3 then None else Some NullCompression;
-    sh_extensions = m.n_server_extensions })
+  ServerHello (Mk_sh
+    (* sh_protocol_version = *) pv
+    (* sh_server_random = *) m.n_server_random
+    (* sh_sessionID = *) m.n_sessionID
+    (* sh_cipher_suite = *) m.n_cipher_suite
+    (* sh_compression = *) (if pv = TLS_1p3 then None else Some NullCompression)
+    (* sh_extensions = *) m.n_server_extensions
+  )
 
 (* receive ClientHello, choose a protocol version and mode *)
 val server_ClientHello: hs -> HandshakeMessages.ch -> ST incoming

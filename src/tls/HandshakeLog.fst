@@ -99,32 +99,9 @@ let rec gforall_list_to_list_refined
   | [] -> []
   | x :: q -> x :: gforall_list_to_list_refined f q
 
-let rec valid_transcript_to_list_valid_hs_msg_aux
-  (v: option protocolVersion)
-  (l: list hs_msg { gforall (valid_hs_msg_prop v) l } )
-: Tot (list (valid_hs_msg v))
-=
-(* FIXME: WHY WHY WHY can this not be defined as:
-   gforall_list_to_list_refined (valid_hs_msg_prop v) l
-*)
-  match l with
-  | [] -> []
-  | a :: q -> a :: valid_transcript_to_list_valid_hs_msg_aux v q
-
-let rec valid_transcript_to_list_valid_hs_msg_aux_inj
-  (v: option protocolVersion)
-  (l1: list hs_msg { gforall (valid_hs_msg_prop v) l1 } )
-  (l2: list hs_msg { gforall (valid_hs_msg_prop v) l2 } )
-: Lemma
-  (requires (valid_transcript_to_list_valid_hs_msg_aux v l1 == valid_transcript_to_list_valid_hs_msg_aux v l2))
-  (ensures (l1 == l2))
-= match l1, l2 with
-  | _ :: q1, _ :: q2 -> valid_transcript_to_list_valid_hs_msg_aux_inj v q1 q2
-  | _ -> ()
-
 let transcript_bytes l =
   let v = transcript_version l in
-  handshakeMessagesBytes v (valid_transcript_to_list_valid_hs_msg_aux v l)
+  handshakeMessagesBytes v l
 
 #set-options "--z3rlimit 64"
 
@@ -139,16 +116,15 @@ let transcript_format_injective ms0 ms1 =
       let v = transcript_version ms0 in
       let (ClientHello ch1 :: q1) = ms1 in
       let v1 = transcript_version ms1 in
-      let l0 = handshakeMessagesBytes v (valid_transcript_to_list_valid_hs_msg_aux v q0) in
-      let l1 = handshakeMessagesBytes v1 (valid_transcript_to_list_valid_hs_msg_aux v1 q1) in
+      let l0 = handshakeMessagesBytes v q0 in
+      let l1 = handshakeMessagesBytes v1 q1 in
       clientHelloBytes_is_injective_strong ch0 l0 ch1 l1;
       begin match q0 with
       | [] -> ()
       | ServerHello sh0 :: q0' ->
         let (ServerHello sh1 :: q1') = q1 in
-        serverHelloBytes_is_injective_strong sh0 (handshakeMessagesBytes v (valid_transcript_to_list_valid_hs_msg_aux v q0')) sh1 (handshakeMessagesBytes v1 (valid_transcript_to_list_valid_hs_msg_aux v1 q1'));
-        handshakeMessagesBytes_is_injective v (valid_transcript_to_list_valid_hs_msg_aux v ms0) (valid_transcript_to_list_valid_hs_msg_aux v ms1);
-        valid_transcript_to_list_valid_hs_msg_aux_inj v ms0 ms1
+        serverHelloBytes_is_injective_strong sh0 (handshakeMessagesBytes v q0') sh1 (handshakeMessagesBytes v1 q1');
+        handshakeMessagesBytes_is_injective v ms0 ms1
       end
   in
   Classical.move_requires f ()
