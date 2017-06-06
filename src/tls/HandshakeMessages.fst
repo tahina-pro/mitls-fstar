@@ -237,6 +237,7 @@ noeq type cke = {
 }
 
 type cv = {
+  cv_sig_scheme: signatureScheme;
   cv_sig: b:bytes{length b < 65536};
 }
 
@@ -1419,8 +1420,9 @@ let parseServerKeyExchange kex payload : result ske =
 (* Certificate Verify *)
 val certificateVerifyBytes: cv -> Tot (b:bytes{hs_msg_bytes HT_certificate_verify b})
 let certificateVerifyBytes cv =
-    lemma_repr_bytes_values (length cv.cv_sig);
-    messageBytes HT_certificate_verify cv.cv_sig
+    let sig_scheme_bytes = signatureSchemeBytes cv.cv_sig_scheme in
+    lemma_repr_bytes_values (length (cv.cv_sig));
+    messageBytes HT_certificate_verify (sig_scheme_bytes @| vlbytes 2 cv.cv_sig)
 
 val certificateVerifyBytes_is_injective: c1:cv -> c2:cv ->
   Lemma (requires True)
@@ -1437,7 +1439,17 @@ let certificateVerifyBytes_is_injective c1 c2 =
 val parseCertificateVerify: data:bytes{repr_bytes(length data) <= 3} ->
     Tot (result (c:cv{Seq.equal (certificateVerifyBytes c) (messageBytes HT_certificate_verify data)}))
 let parseCertificateVerify data =
-  if length data < 65536 then Correct ({cv_sig = data}) else error "CertificateVerify too large"
+  if length data >= 4 then
+    let sc, sig = split data 2 in
+    match parseSignatureScheme sc with
+    | Correct sigalg ->
+      (match vlparse 2 sig with
+      | Correct sigv ->
+        Correct ({cv_sig_scheme = sigalg; cv_sig = data})
+      | Error _ -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "CertificateVerify: incorrect signature length"))
+    | Error _ -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "CertificateVerify: invalid signature scheme")
+  else
+   Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "CertificateVerify: message too short")
 
 val finishedBytes: fin -> Tot (b:bytes{hs_msg_bytes HT_finished b})
 let finishedBytes fin =

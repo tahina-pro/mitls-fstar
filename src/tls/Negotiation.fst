@@ -549,7 +549,7 @@ let getSigningKey #a #region #role ns =
   Signature.lookup_key #a ns.cfg.private_key_file
 
 val sign: #region:rgn -> #role:TLSConstants.role -> t region role -> bytes ->
-  ST (option bytes)
+  ST (option HandshakeMessages.cv)
   (requires (fun h -> True))
   (ensures (fun h0 _ h1 -> True))
 let sign #region #role ns tbs =
@@ -567,7 +567,8 @@ let sign #region #role ns tbs =
     | Some skey ->
       let sigv = Signature.sign #a ha skey tbs in
       lemma_repr_bytes_values (length sigv);
-      if length sigv >= 2 && length sigv < 65536 then Some (signatureSchemeBytes scheme @| vlbytes 2 sigv)
+      if length sigv >= 2 && length sigv < 65536 then
+        Some ({cv_sig_scheme = scheme; cv_sig = sigv})
       else None
     end
 
@@ -935,18 +936,33 @@ let client_ServerKeyExchange #region ns crt ske ocr =
 
 val clientComplete_13: #region:rgn -> t region Client ->
   HandshakeMessages.ee ->
-  ocr: option HandshakeMessages.cr13 ->
-  serverCert: Cert.chain13 ->
-  cv: HandshakeMessages.cv ->
-  digest: bytes{length digest <= 32} ->
+  optCertRequest: option HandshakeMessages.cr13 ->
+  optServerCert: option Cert.chain13 -> // Not sent with PSK
+  optCertVerify: option HandshakeMessages.cv -> // Not sent with PSK
+  digest: option (b:bytes{length b <= 32}) ->
   St (result mode) // it needs to be computed, whether returned or not
-let clientComplete_13 #region ns ee ocr serverChain cv digest =
+let clientComplete_13 #region ns ee optCertRequest optServerCert optCertVerify digest =
   trace "Nego.clientComplete_13";
   match MR.m_read ns.state with
   | C_Mode mode ->
     let ccert = None in
-    let scert = Some serverChain in
-    let sexts = mode.n_server_extensions in // TODO: add extensions from EE
+    let sexts =
+      match mode.n_server_extensions, ee with
+      | Some el, ee -> Some (List.Tot.append el ee)
+      | None, [] -> None
+      | None, ee -> Some ee in
+    let validSig =
+      match kexAlg mode, optServerCert, optCertVerify, digest with
+      | Kex_ECDHE, Some c, Some cv, Some digest ->
+        // TODO ensure that valid_offer mandates signature extensions for 1.3
+        let Some sal = find_signature_algorithms mode.n_offer in
+        if List.Tot.mem cv.cv_sig_scheme sal then
+          let tbs = to_be_signed mode.n_protocol_version Server None digest in
+          let chain = Cert.chain_down c in
+          verify cv.cv_sig_scheme chain tbs cv.cv_sig
+        else false // The server signed with an algorithm we did not offer
+      | _ -> false in
+    trace ("Signature 1.3: " ^ (if validSig then "Valid" else "Invalid"));
     let mode = Mode
       mode.n_offer
       mode.n_hrr
@@ -957,8 +973,8 @@ let clientComplete_13 #region ns ee ocr serverChain cv digest =
       mode.n_pski
       mode.n_server_extensions
       mode.n_server_share
-      ocr
-      scert
+      optCertRequest
+      optServerCert
       mode.n_client_share
     in
     MR.m_write ns.state (C_Complete mode ccert);
