@@ -53,12 +53,24 @@ let tagged m =
 let weak_valid_transcript hsl =
     match hsl with
     | [] -> true
-    | [ClientHello ch] -> true
-    | (ClientHello ch) :: (ServerHello sh) :: rest -> true
+    | (ClientHello ch) :: q1 ->
+      begin match q1 with
+      | [] -> true
+      | (ServerHello _) :: _ ->
+        bindersLen_of_ch ch = 0
+      | (Binders b) :: q2 ->
+        bindersLen_of_ch ch = length (Extensions.bindersBytes b) &&
+        begin match q2 with
+        | ServerHello _ :: _ -> true
+        | _ -> false
+        end
+      | _ -> false
+      end
     | _ -> false
 
 let transcript_version (x: list msg { weak_valid_transcript x } ) = match x with
-    | (ClientHello ch) :: (ServerHello sh) :: rest -> Some sh.sh_protocol_version
+    | (ClientHello _) :: (Binders _) :: (ServerHello sh) :: _
+    | (ClientHello _) :: (ServerHello sh) :: _ -> Some sh.sh_protocol_version
     | _ -> None
 
 (* TODO: move to something like FStar.List.GTot *)
@@ -68,7 +80,9 @@ let rec gforall (#a: Type) (f: (a -> GTot bool)) (l: list a) : GTot bool =
   | x :: q -> f x && gforall f q
 
 let valid_transcript hsl : GTot bool =
-  weak_valid_transcript hsl
+  weak_valid_transcript hsl (* && // TODO: restore dependency on transcript_version
+    gforall (valid_hs_msg_prop (transcript_version hsl)) hsl
+  *)
 
 let hs_transcript: Type0 = l:list msg {valid_transcript l}
 

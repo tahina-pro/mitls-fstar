@@ -1926,6 +1926,18 @@ let rec handshakeMessagesBytes pv hsl =
 
 #reset-options
 
+let rec handshakeMessagesBytes_append
+  (pv: option protocolVersion)
+  (l1 l2: list hs_msg)
+: Lemma
+  (handshakeMessagesBytes pv (l1 @ l2) == handshakeMessagesBytes pv l1 @| handshakeMessagesBytes pv l2)
+= match l1 with
+  | [] ->
+    append_empty_bytes_l (handshakeMessagesBytes pv l2)
+  | a :: q ->
+    handshakeMessagesBytes_append pv q l2;
+    append_assoc (handshakeMessageBytes pv a) (handshakeMessagesBytes pv q) (handshakeMessagesBytes pv l2)
+
 let lemma_handshakeMessagesBytes_def (pv:option protocolVersion) (li:list (msg:hs_msg){Cons? li}) : Lemma (handshakeMessagesBytes pv li = ((handshakeMessageBytes pv (Cons?.hd li)) @| (handshakeMessagesBytes pv (Cons?.tl li)))) = ()
 
 let lemma_handshakeMessagesBytes_def2 (pv:option protocolVersion) (li:list (msg:hs_msg){Nil? li}) : Lemma (handshakeMessagesBytes pv li = empty_bytes) = ()

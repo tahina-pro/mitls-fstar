@@ -105,29 +105,41 @@ let transcript_bytes l =
 
 #set-options "--z3rlimit 64"
 
-let transcript_format_injective ms0 ms1 =
-  let f ()
-  : Lemma
-    (requires (Seq.equal (transcript_bytes ms0) (transcript_bytes ms1)))
-    (ensures (ms0 == ms1))
-  = match ms0 with
-    | [] -> ()
-    | ClientHello ch0 :: q0 ->
-      let v = transcript_version ms0 in
-      let (ClientHello ch1 :: q1) = ms1 in
-      let v1 = transcript_version ms1 in
-      let l0 = handshakeMessagesBytes v q0 in
-      let l1 = handshakeMessagesBytes v1 q1 in
-      clientHelloBytes_is_injective_strong ch0 l0 ch1 l1;
-      begin match q0 with
-      | [] -> ()
-      | ServerHello sh0 :: q0' ->
-        let (ServerHello sh1 :: q1') = q1 in
-        serverHelloBytes_is_injective_strong sh0 (handshakeMessagesBytes v q0') sh1 (handshakeMessagesBytes v1 q1');
-        handshakeMessagesBytes_is_injective v ms0 ms1
+let transcript_format_version
+  (ms ms': hs_transcript)
+: Lemma
+  (requires (Seq.equal (transcript_bytes ms) (transcript_bytes ms')))
+  (ensures (transcript_version ms == transcript_version ms'))
+= match ms with
+  | [] -> assert (ms' == [])
+  | ClientHello ch :: q0 ->
+    let v = transcript_version ms in
+    let v' = transcript_version ms' in
+    let (ClientHello ch' :: q0') = ms' in
+    clientHelloBytes_is_injective_strong ch (handshakeMessagesBytes v q0) ch' (handshakeMessagesBytes v' q0');
+    begin match q0 with
+    | [] -> assert (q0' == [])
+    | Binders b :: q1 ->
+      let (Binders b' :: q1') = q0' in
+      lemma_append_inj (Extensions.bindersBytes b) (handshakeMessagesBytes v q1) (Extensions.bindersBytes b') (handshakeMessagesBytes v' q1');
+      begin match q1 with
+      | [] -> assert (q1' == [])
+      | ServerHello sh :: q2 ->
+        let (ServerHello sh' :: q2') = q1' in
+        serverHelloBytes_is_injective_strong sh (handshakeMessagesBytes v q2) sh' (handshakeMessagesBytes v' q2')
       end
-  in
-  Classical.move_requires f ()
+    | ServerHello sh :: q1 ->
+      let (ServerHello sh' :: q1') = q0' in
+      serverHelloBytes_is_injective_strong sh (handshakeMessagesBytes v q1) sh' (handshakeMessagesBytes v' q1')
+    end
+
+let transcript_format_injective ms0 ms1 =
+  if transcript_bytes ms0 = transcript_bytes ms1
+  then begin
+    transcript_format_version ms0 ms1;
+    handshakeMessagesBytes_is_injective (transcript_version ms0) ms0 ms1
+  end else
+    ()
 
 //The type below includes buffers, the log, the hash, and the params needed to parse and hash the log.
 //Note that a lot of this information is available in the log itself.
