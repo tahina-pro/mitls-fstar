@@ -564,7 +564,7 @@ let sendHandshake_post (#c:connection) (#i:id) (wopt:option (cwriter i c))
 		       then frags1==snoc frags0' (Content.CT_CCS #i (point 1))
 		       else frags1==frags0')))))
 
-#reset-options "--z3rlimit 100 --initial_fuel 0 --max_fuel 0 --initial_ifuel 1 --max_ifuel 1"
+#reset-options "--z3rlimit 200 --initial_fuel 0 --max_fuel 0 --initial_ifuel 1 --max_ifuel 1"
 private let sendHandshake (#c:connection) (#i:id) (wopt:option (cwriter i c)) (om:option (HandshakeLog.fragment i)) (send_ccs:bool)
   : ST (result unit)
        (requires (sendFragment_inv wopt))
