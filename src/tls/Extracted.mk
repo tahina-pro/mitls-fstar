@@ -104,9 +104,9 @@ mitls.exe: mitls.cmxa test/mitls.cmx
 	ocamlfind ocamlopt $(OCAMLOPTS) $(OCAML_INCLUDE_PATHS) -I test/ -g \
 	$(FSTAR_HOME)/ulib/ml/fstarlib.cmxa \
 	$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa \
-	$(LCDIR)/lowc_stub.o $(LCDIR)/libllcrypto.a $(LCDIR)/LowCProvider.cmx \
+	$(LCDIR)/lowc_stub.o  $(LCDIR)/LowCProvider.cmx \
 	$(FFI_HOME)/FFICallbacks.cmxa \
-	mitls.cmxa test/mitls.cmx -o mitls.exe
+	mitls.cmxa $(LCDIR)/libllcrypto.a test/mitls.cmx -o mitls.exe
 
 test.out: mitls.cmxa $(ODIR)/TestKS.ml $(ODIR)/TestDH.ml $(ODIR)/TestGCM.ml test/parsing_test.ml test/test_hkdf.ml test/test_main.ml
 	ocamlfind ocamlopt $(OCAMLOPTS) $(OCAML_INCLUDE_PATHS) \
