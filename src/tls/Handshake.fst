@@ -362,7 +362,7 @@ let client_ServerHello (s:hs) (sh:sh) (* digest:Hashing.anyTag *) : St incoming 
     let pv = mode.Nego.n_protocol_version in
     let ha = Nego.hashAlg mode in
     let ka = Nego.kexAlg mode in
-    HandshakeLog.setParams s.log pv ha (Some ka) None (*?*);
+    HandshakeLog.setParams s.log ha (Some ka) None (*?*);
     match pv with
     | TLS_1p3 ->
       begin
@@ -624,7 +624,7 @@ let server_ClientHello hs offer obinders =
     then (
       trace "accepted TLS 1.2 resumption";
       let ka = Nego.kexAlg mode in
-      HandshakeLog.setParams hs.log pv ha (Some ka) None;
+      HandshakeLog.setParams hs.log ha (Some ka) None;
       // TODO make ticket issuance optional
       let Some tid = Nego.find_sessionTicket offer in
       let adk = KeySchedule.ks_server_12_resume hs.ks cr tid in
@@ -681,7 +681,7 @@ let server_ClientHello hs offer obinders =
       | Error z -> InError z
       | Correct mode ->
         let ka = Nego.kexAlg mode in
-        HandshakeLog.setParams hs.log pv ha (Some ka) None;
+        HandshakeLog.setParams hs.log ha (Some ka) None;
         let ha = verifyDataHashAlg_of_ciphersuite mode.Nego.n_cipher_suite in
         // these hashes are not always used
         let digestClientHelloBinders = HandshakeLog.hash_tag #ha hs.log in
