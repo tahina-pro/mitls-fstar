@@ -19,8 +19,7 @@ VERFLAGS = --max_fuel 4 --initial_fuel 0 --max_ifuel 2 --initial_ifuel 1 --z3rli
 # must be processed sequentially,
 # but each subtarget alone can be built with parallelism enabled.
 all:
-	+$(MAKE) -f Extracted.mk mlclean # TODO: temporary workaround, remove once build system is sanitized
-	+$(MAKE) build
+#	+$(MAKE) build # TODO: temporary workaround, remove once build system is sanitized
 	+$(MAKE) verify
 
 build:
