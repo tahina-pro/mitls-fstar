@@ -110,7 +110,7 @@ private let rec server_loop_12 config sock : ML unit =
   let raw_tcp = Platform.Tcp.accept sock in
   let tcp = Transport.wrap raw_tcp in
   let rid = new_region root in
-  let log = HandshakeLog.create #rid in
+  let log = HandshakeLog.create rid in
   let ks, sr = KeySchedule.create #rid Server log in
   let recv = ralloc rid Record.wait_header in 
 
@@ -229,7 +229,7 @@ let client_12 config host port : ML unit =
   IO.print_string "===============================================\n Starting test TLS 1.2 client...\n";
   let tcp = Transport.connect host port in
   let rid = new_region root in
-  let log = HandshakeLog.create #rid in
+  let log = HandshakeLog.create rid in
   let ks, cr = KeySchedule.create #rid Client log in
   let recv = ralloc rid Record.wait_header in 
 
@@ -305,7 +305,7 @@ let client_13 config host port : ML unit =
   IO.print_string "===============================================\n Starting test TLS 1.3 client...\n";
   let tcp = Transport.connect host port in
   let rid = new_region root in
-  let lg = HandshakeLog.create #rid in
+  let lg = HandshakeLog.create rid in
   let ks, cr = KeySchedule.create #rid Client lg in
   let recv = ralloc rid Record.wait_header in 
 
@@ -387,7 +387,7 @@ private let rec server_loop_13 config sock : ML unit =
   let raw_tcp = Platform.Tcp.accept sock in
   let tcp = Transport.wrap raw_tcp in
   let rid = new_region root in
-  let lg = HandshakeLog.create #rid in
+  let lg = HandshakeLog.create rid in
   let ks, sr = KeySchedule.create #rid Server lg in
   let recv = ralloc rid Record.wait_header in 
 

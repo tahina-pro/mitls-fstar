@@ -348,7 +348,7 @@ let client_ServerHello (s:hs) (sh:sh) (* digest:Hashing.anyTag *) : St incoming 
     let pv = mode.Nego.n_protocol_version in
     let ha = Nego.hashAlg mode in
     let ka = Nego.kexAlg mode in
-    HandshakeLog.setParams s.log pv ha (Some ka) None (*?*);
+    HandshakeLog.setParams s.log ha (Some ka) None (*?*);
     match pv with
     | TLS_1p3 ->
       begin
@@ -590,7 +590,6 @@ let server_ClientHello hs offer =
       let cr = mode.Nego.n_offer.ch_client_random in
       let ha = Nego.hashAlg mode in
       let ka = Nego.kexAlg mode in
-      HandshakeLog.setParams hs.log pv ha (Some ka) None;
       let Some tid = Nego.find_sessionTicket offer in
       let adk = KeySchedule.ks_server_12_resume hs.ks cr tid in
       register hs adk;
@@ -598,6 +597,7 @@ let server_ClientHello hs offer =
       | Error z -> InError z
       | Correct mode ->
         HandshakeLog.send hs.log (serverHello mode);
+        HandshakeLog.setParams hs.log ha (Some ka) None; // must set version here because of serverHello
         let ticket = {sticket_lifetime = FStar.UInt32.(uint_to_t 3600); sticket_ticket = tid; } in
         let digestT = HandshakeLog.send_tag #ha hs.log (NewSessionTicket ticket) in
         let fink = KeySchedule.ks_12_finished_key hs.ks in
@@ -641,7 +641,7 @@ let server_ClientHello hs offer =
           let pv = mode.Nego.n_protocol_version in
           let ha = Nego.hashAlg mode in
           let ka = Nego.kexAlg mode in
-          HandshakeLog.setParams hs.log pv ha (Some ka) None;
+          HandshakeLog.setParams hs.log ha (Some ka) None;
           let ha = verifyDataHashAlg_of_ciphersuite mode.Nego.n_cipher_suite in
           // these hashes are not always used
           let digestClientHelloBinders = HandshakeLog.hash_tag #ha hs.log in
@@ -852,7 +852,7 @@ val version: s:hs -> Tot protocolVersion
 
 let create (parent:rid) cfg role resume =
   let r = new_region parent in
-  let log = HandshakeLog.create r None (* cfg.maxVer (Nego.hashAlg nego) *) in
+  let log = HandshakeLog.create r (* cfg.maxVer (Nego.hashAlg nego) *) in
   //let nonce = Nonce.mkHelloRandom r r0 in //NS: should this really be Client?
   let ks, nonce = KeySchedule.create #r role in
   let nego = Nego.create r role cfg resume nonce in

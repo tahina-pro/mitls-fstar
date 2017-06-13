@@ -196,7 +196,7 @@ noeq type state =
     hashes: hashState transcript parsed  ->
 
     // memoized parameters
-    pv: option protocolVersion ->             // Initially: the pv in the clientHello, then the pv in the serverHello
+    pv: option protocolVersion { pv == transcript_version (reveal_log transcript @ parsed) } ->
     kex: option kexAlg ->                    // Used for the CKE and SKE
     dh_group: option CommonDH.group -> // Used for the CKE
     state
@@ -207,6 +207,7 @@ let log = HS.ref state
 let get_reference l =
     HS.(Ref l)
 
+// FIXME: what is this for?
 val init: h:HS.mem -> log -> option TLSConstants.protocolVersion -> GTot bool
 let init h (st:log) (pvo: option protocolVersion) =
    let s = HS.sel h st in
@@ -236,14 +237,14 @@ let hashAlg h st =
 let transcript h t =
     reveal_log ((HS.sel h t).transcript)
 
-let create reg pv =
+let create reg =
     let l = State empty_hs_transcript empty_bytes None false
               empty_bytes [] (OpenHash empty_bytes) 
-      pv None None in
+      None None None in
     let st = ralloc reg l in
     st
 
-let setParams l pv ha kexo dho =
+let setParams l ha kexo dho =
   let st = !l in
   match st.hashes with
   | OpenHash msgs ->
@@ -256,7 +257,7 @@ let setParams l pv ha kexo dho =
       let hs = FixedHash ha acc [] in
       recall l;
       l := State st.transcript st.outgoing st.outgoing_next_keys st.outgoing_complete
-              st.incoming st.parsed hs (Some pv) kexo dho
+              st.incoming st.parsed hs st.pv kexo dho
 
 // TR: verifies up to this point
 #set-options "--lax"
@@ -465,35 +466,108 @@ let rec hashHandshakeMessages t p hs n nb =
       let hs = FixedHash a acc tl in
       hashHandshakeMessages t (p @ [m]) hs mrest brest)
 
+#reset-options
+
+let rec transcript_version_weak
+  (l: list hs_msg)
+: Tot (option protocolVersion)
+= match l with
+  | [] -> None
+  | ServerHello sh :: _ -> Some sh.sh_protocol_version
+  | _ :: q -> transcript_version_weak q
+
+let transcript_version_weak_weak_valid_transcript
+  (l: list hs_msg { weak_valid_transcript l } )
+: Lemma
+  (transcript_version l == transcript_version_weak l)
+= ()
+
+let rec transcript_version_weak_append_some
+  (l1 l2: list hs_msg)
+: Lemma
+  (requires (Some? (transcript_version_weak l1)))
+  (ensures (transcript_version_weak (l1 @ l2) == transcript_version_weak l1))
+= match l1 with
+  | ServerHello _ :: _ -> ()
+  | _ :: q -> transcript_version_weak_append_some q l2
+
+let rec transcript_version_weak_append_none
+  (l1 l2: list hs_msg)
+: Lemma
+  (requires (None? (transcript_version_weak l1)))
+  (ensures (transcript_version_weak (l1 @ l2) == transcript_version_weak l2))
+= match l1 with
+  | [] -> ()
+  | _ :: q -> transcript_version_weak_append_none q l2
+
+assume val modifies_none_modifies_one
+  (s: log)
+  (h1 h2: HS.mem)
+: Lemma
+  (requires (modifies_none h1 h2))
+  (ensures (modifies_one s h1 h2))
+  [SMTPat (modifies_none h1 h2); SMTPat (modifies_one s h1 h2)]
+
 let receive l mb =
+  let h = ST.get () in
+  assume (h `HS.contains` l);
+  assume (h `HS.weak_contains` l);
   let st = !l in
   let ib = st.incoming @| mb in
   match parseMessages st.pv st.kex ib with
   | Error z -> Error z
+  | _ ->
+    Error (AD_internal_error, "foobar")
+
+(*
   | Correct (false,r,[],[]) -> (
-       l := State
+       recall l;
+       let st' : state = State
          st.transcript st.outgoing st.outgoing_next_keys st.outgoing_complete
-         r st.parsed st.hashes st.pv st.kex st.dh_group;
+         r st.parsed st.hashes st.pv st.kex st.dh_group
+       in
+       l := st' ;
        Correct None )
   | Correct(eof,r,ml,bl) ->
       let hs = hashHandshakeMessages st.transcript st.parsed st.hashes ml bl in
+      let pv =
+        if Some? st.pv
+        then st.pv
+        else transcript_version_weak ml          
+      in
+      let ml' = ml in
       let ml = st.parsed @ ml in
+      List.Tot.append_assoc (reveal_log st.transcript) st.parsed ml';
+      assume (valid_transcript (reveal_log st.transcript @ ml));
+      assume (pv == transcript_version (reveal_log st.transcript @ ml));
       if eof then (
         let nt = append_hs_transcript st.transcript ml in
+        List.Tot.append_nil_l (reveal_log nt);
         let (hs,tl) : hashState nt [] * list anyTag =
           match hs with
           | FixedHash a ac htl -> FixedHash a ac [], htl
           | OpenHash _ -> hs,[] in
-        l := State
+        recall l;
+        let st' : state = State
           nt st.outgoing st.outgoing_next_keys st.outgoing_complete
-          r [] hs st.pv st.kex st.dh_group;
-        Correct (Some (ml,tl)))
+          r [] hs pv st.kex st.dh_group
+        in
+        l := st' ;
+        let r = Correct (Some (ml,tl)) in
+        assume False;
+        r
+      )
       else (
-        l := State 
+        recall l;
+        let st' : state = State
           st.transcript st.outgoing st.outgoing_next_keys st.outgoing_complete
-          r ml hs st.pv st.kex st.dh_group;
+          r ml hs pv st.kex st.dh_group
+        in
+        l := st' ;
         Correct None )
+*)
 
+#set-options "--lax"
 
 // We receive CCS as external end-of-flight signals;
 // we return the messages processed so far, and their final tag;

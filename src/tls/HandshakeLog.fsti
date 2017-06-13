@@ -50,34 +50,51 @@ let tagged m =
 - support abstract plaintexts and multiple epochs
 *)
 
+(* TODO: move to something like FStar.List.GTot *)
+let rec gforall (#a: Type) (f: (a -> GTot bool)) (l: list a) : GTot bool =
+  match l with
+  | [] -> true
+  | x :: q -> f x && gforall f q
+
+let nice_tail q =
+  gforall
+    (fun x -> not (
+      ClientHello? x ||
+      ServerHello? x ||
+      Binders? x ||
+      false
+    ))
+    q
+
 let weak_valid_transcript hsl =
     match hsl with
     | [] -> true
     | (ClientHello ch) :: q1 ->
       begin match q1 with
       | [] -> true
-      | (ServerHello _) :: _ ->
-        bindersLen_of_ch ch = 0
+      | (ServerHello _) :: q ->
+        bindersLen_of_ch ch = 0 &&
+        nice_tail q
       | (Binders b) :: q2 ->
         bindersLen_of_ch ch = length (Extensions.bindersBytes b) &&
         begin match q2 with
-        | ServerHello _ :: _ -> true
+        | ServerHello _ :: q ->
+          nice_tail q
         | _ -> false
         end
       | _ -> false
       end
     | _ -> false
 
-let transcript_version (x: list msg { weak_valid_transcript x } ) = match x with
+let transcript_version
+  (x: list msg)
+: Pure (option TLSConstants.protocolVersion)
+  (requires (weak_valid_transcript x))
+  (ensures (fun _ -> True))
+= match x with
     | (ClientHello _) :: (Binders _) :: (ServerHello sh) :: _
     | (ClientHello _) :: (ServerHello sh) :: _ -> Some sh.sh_protocol_version
     | _ -> None
-
-(* TODO: move to something like FStar.List.GTot *)
-let rec gforall (#a: Type) (f: (a -> GTot bool)) (l: list a) : GTot bool =
-  match l with
-  | [] -> true
-  | x :: q -> f x && gforall f q
 
 let valid_transcript hsl : GTot bool =
   weak_valid_transcript hsl (* && // TODO: restore dependency on transcript_version
@@ -86,7 +103,13 @@ let valid_transcript hsl : GTot bool =
 
 let hs_transcript: Type0 = l:list msg {valid_transcript l}
 
-let append_transcript (l:hs_transcript) (m:list msg {valid_transcript (l @ m)}): Tot hs_transcript = l @ m
+let append_transcript
+  (l:hs_transcript)
+  (m:list msg)
+: Pure hs_transcript
+  (requires (valid_transcript (l @ m)))
+  (ensures (fun _ -> True))
+= l @ m
 
 val transcript_bytes: hs_transcript -> GTot bytes
 
@@ -157,8 +180,7 @@ val hashAlg: h:HS.mem -> log -> GTot (option Hashing.alg)
 // the transcript of past messages, in both directions
 val transcript: h:HS.mem -> log -> GTot hs_transcript
 
-//17-04-12 for now always called with pv = None.
-val create: reg:TLSConstants.rgn -> pv:option TLSConstants.protocolVersion -> ST log
+val create: reg:TLSConstants.rgn -> ST log
   (requires (fun h -> True))
   (ensures (fun h0 out h1 ->
     HS.modifies (Set.singleton reg) h0 h1 /\ // todo: we just allocate (ref_of out)
@@ -167,7 +189,6 @@ val create: reg:TLSConstants.rgn -> pv:option TLSConstants.protocolVersion -> ST
     hashAlg h1 out == None ))
 
 val setParams: s:log ->
-  TLSConstants.protocolVersion ->
   a: Hashing.alg ->
   option TLSConstants.kexAlg ->
   option CommonDH.group -> ST unit
@@ -176,7 +197,7 @@ val setParams: s:log ->
     modifies_one s h0 h1 /\
     transcript h1 s == transcript h0 s /\
     writing h1 s == writing h0 s /\
-    hashAlg h1 s == Some a ))
+    hashAlg h1 s == Some a))
 
 
 (* Outgoing *)
@@ -303,16 +324,25 @@ val receive: s:log -> bytes -> ST (result (option (list msg * list anyTag)))
     let oa = hashAlg h1 s in
     let t0 = transcript h0 s in
     let t1 = transcript h1 s in
-    oa == hashAlg h0 s /\
-    modifies_one s h0 h1 /\ (
-    match o with
+    modifies_one s h0 h1 /\
+    begin match o with
     | Error _ -> True // left underspecified
-    | Correct None ->
+    | Correct c ->
+      oa == hashAlg h0 s /\
+      begin match c with
+      | None ->
         t1 == t0
-    | Correct (Some (ms, hs)) ->
+      | Some (ms, hs) ->
         t1 == t0 @ ms /\
         writing h1 s /\
-        (match oa with Some a -> tags a t0 ms hs | None -> hs == [])  )))
+        begin match oa with
+        | Some a ->
+          tags a t0 ms hs
+        | None -> hs == []
+        end
+      end
+     end
+  ))
 
 // We receive CCS as external end-of-flight signals;
 // we return the messages & hashes processed so far, and their final tag;
