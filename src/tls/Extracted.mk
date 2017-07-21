@@ -46,28 +46,20 @@ $(ODIR)/Flag.ml: $(LLDIR)/test/Flag.fst
 	  --include concrete-flags $<
 
 # Try to only rebuild CoreCrypto when necessary
-# TR: NOTE trick here: fake pattern rules to ensure that the rule is chosen only once
-# "o" is INTENTIONALLY replaced with %
-$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypt%.cmi $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypt%.cmx $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypt%.cmxa: \
+$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmi $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmx $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa: \
 		$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.ml
 	$(MAKE) -C $(FSTAR_HOME)/ucontrib/CoreCrypto/ml
 
 # Try to only rebuild LowCProvider when necessary
 # Missing: not dependency on hacl-star/code/*
-# TR: NOTE trick here: fake pattern rules to ensure that the rule is chosen only once
-# "r" is INTENTIONALLY replaced with %
-$(LCDIR)/LowCProvide%.cmi $(LCDIR)/LowCProvide%.cmx $(LCDIR)/LowCProvide%.cmxa: $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa $(wildcard $(LLDIR)/*/*.fst)
+$(LCDIR)/LowCProvider.cmi $(LCDIR)/LowCProvider.cmx $(LCDIR)/LowCProvider.cmxa: $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa $(wildcard $(LLDIR)/*/*.fst)
 	echo I want $@
 	$(MAKE) -C $(LCDIR)
 
-# TR: NOTE trick here: fake pattern rules to ensure that the rule is chosen only once
-# "s" is INTENTIONALLY replaced with %
-$(FFI_HOME)/FFICallback%.cmi $(FFI_HOME)/FFICallback%.cmx $(FFI_HOME)/FFICallback%.cmxa: $(wildcard $(FFI_HOME)/*.ml) $(wildcard $(FFI_HOME)/*.c)
+$(FFI_HOME)/FFICallbacks.cmi $(FFI_HOME)/FFICallbacks.cmx $(FFI_HOME)/FFICallbacks.cmxa: $(wildcard $(FFI_HOME)/*.ml) $(wildcard $(FFI_HOME)/*.c)
 	$(MAKE) -C $(FFI_HOME)
 
-# TR: NOTE trick here: fake pattern rules to ensure that the rule is chosen only once
-# "r" is INTENTIONALLY replaced with %
-$(ODIR)/FFIRegiste%.cmi $(ODIR)/FFIRegiste%.cmx: $(FFI_HOME)/FFIRegister.ml $(ODIR)/FFI.cmx $(ODIR)/QUIC.cmx
+$(ODIR)/FFIRegister.cmi $(ODIR)/FFIRegister.cmx: $(FFI_HOME)/FFIRegister.ml $(ODIR)/FFI.cmx $(ODIR)/QUIC.cmx
 	$(OCAMLOPT) $(OCAMLOPTS) $(OCAML_INCLUDE_PATHS) -c $(FFI_HOME)/FFIRegister.ml -o $(ODIR)/FFIRegister.cmx
 
 %.cmi %.cmx: %.ml
