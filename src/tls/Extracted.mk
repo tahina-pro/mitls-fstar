@@ -46,38 +46,22 @@ $(ODIR)/Flag.ml: $(LLDIR)/test/Flag.fst
 	  --include concrete-flags $<
 
 # Try to only rebuild CoreCrypto when necessary
-# TR: NOTE trick here: reversed dependencies because we know that the .cmxa is always built together with the .cmi and the .cmx
-# (in fact, there is no clean way to ensure that this rule will be triggered only once)
-$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmi: $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa
-$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmx: $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa
-$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa: \
+$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmi $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmx $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa: \
 		$(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.ml
 	$(MAKE) -C $(FSTAR_HOME)/ucontrib/CoreCrypto/ml
 
 # Try to only rebuild LowCProvider when necessary
 # Missing: not dependency on hacl-star/code/*
-# TR: NOTE trick here: reversed dependencies because we know that the .cmxa is always built together with the .cmi and the .cmx
-# (in fact, there is no clean way to ensure that this rule will be triggered only once)
-$(LCDIR)/LowCProvider.cmi: $(LCDIR)/LowCProvider.cmxa
-$(LCDIR)/LowCProvider.cmx: $(LCDIR)/LowCProvider.cmxa
-$(LCDIR)/LowCProvider.cmxa: $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa $(wildcard $(LLDIR)/*/*.fst)
+$(LCDIR)/LowCProvider.cmi $(LCDIR)/LowCProvider.cmx $(LCDIR)/LowCProvider.cmxa: $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa $(wildcard $(LLDIR)/*/*.fst)
 	echo I want $@
 	$(MAKE) -C $(LCDIR)
 
-# TR: NOTE trick here: reversed dependencies because we know that the .cmxa is always built together with the .cmi and the .cmx
-# (in fact, there is no clean way to ensure that this rule will be triggered only once)
-$(FFI_HOME)/FFICallbacks.cmi: $(FFI_HOME)/FFICallbacks.cmxa
-$(FFI_HOME)/FFICallbacks.cmx: $(FFI_HOME)/FFICallbacks.cmxa
-$(FFI_HOME)/FFICallbacks.cmxa: $(wildcard $(FFI_HOME)/*.ml) $(wildcard $(FFI_HOME)/*.c)
+$(FFI_HOME)/FFICallbacks.cmi $(FFI_HOME)/FFICallbacks.cmx $(FFI_HOME)/FFICallbacks.cmxa: $(wildcard $(FFI_HOME)/*.ml) $(wildcard $(FFI_HOME)/*.c)
 	$(MAKE) -C $(FFI_HOME)
 
-# TR: NOTE trick here: reversed dependencies because we know that the .cmx is always built together with the .cmi
-# (in fact, there is no clean way to ensure that this rule will be triggered only once)
-$(ODIR)/FFIRegister.cmi: $(ODIR)/FFIRegister.cmx
-$(ODIR)/FFIRegister.cmx: $(FFI_HOME)/FFIRegister.ml $(ODIR)/FFI.cmx $(ODIR)/QUIC.cmx
+$(ODIR)/FFIRegister.cmi $(ODIR)/FFIRegister.cmx: $(FFI_HOME)/FFIRegister.ml $(ODIR)/FFI.cmx $(ODIR)/QUIC.cmx
 	$(OCAMLOPT) $(OCAMLOPTS) $(OCAML_INCLUDE_PATHS) -c $(FFI_HOME)/FFIRegister.ml -o $(ODIR)/FFIRegister.cmx
 
-# TODO: protect this rule so that it is not triggered by CoreCrypto, LowCProvider, FFICallbacks, FFIRegister
 %.cmi %.cmx: %.ml
 	$(OCAMLOPT) $(OCAMLOPTS) $(OCAML_INCLUDE_PATHS) -c $<
 	@[ -f $(ODIR)/.deporder ] || echo "$(subst .ml,.cmx,$<) " >> $(ODIR)/.tmp
