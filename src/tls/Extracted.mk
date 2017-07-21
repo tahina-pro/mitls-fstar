@@ -53,6 +53,7 @@ $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmi $(FSTAR_HOME)/ucontrib/CoreC
 # Try to only rebuild LowCProvider when necessary
 # Missing: not dependency on hacl-star/code/*
 $(LCDIR)/LowCProvider.cmi $(LCDIR)/LowCProvider.cmx $(LCDIR)/LowCProvider.cmxa: $(FSTAR_HOME)/ucontrib/CoreCrypto/ml/CoreCrypto.cmxa $(wildcard $(LLDIR)/*/*.fst)
+	echo I want $@
 	$(MAKE) -C $(LCDIR)
 
 $(FFI_HOME)/FFICallbacks.cmi $(FFI_HOME)/FFICallbacks.cmx $(FFI_HOME)/FFICallbacks.cmxa: $(wildcard $(FFI_HOME)/*.ml) $(wildcard $(FFI_HOME)/*.c)
