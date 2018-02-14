@@ -176,6 +176,52 @@ let parse_vldata_gen
   `and_then`
   parse_vldata_payload sz f p
 
+#reset-options "--z3rlimit 16 --z3cliopt smt.arith.nl=false"
+
+let plus_0_r (x: int) : Lemma (x + 0 == x) = ()
+
+#reset-options
+
+let parse_vldata_gen_intro_some
+  (sz: integer_size)
+  (f: (bounded_integer sz -> GTot bool))
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (input: bytes)
+  (len: bounded_integer sz)
+  (consumed_len: nat)
+  (x: t)
+: Lemma
+  (requires (
+    consumed_len <= Seq.length input /\
+    parse (parse_bounded_integer sz) input == Some (len, consumed_len) /\ (
+    consumed_len == (sz <: nat) ==> (
+    consumed_len + U32.v len <= Seq.length input /\
+    f len == true /\ (
+    let input' = Seq.slice input consumed_len (consumed_len + U32.v len) in
+    parse p input' == Some (x, (U32.v len <: consumed_length input'))
+  )))))
+  (ensures (
+    consumed_len == (sz <: nat) /\
+    parse (parse_vldata_gen sz f p) input == Some (x, consumed_len + U32.v len)
+  ))
+= assert (consumed_len == (sz <: nat));
+  let s0 = Seq.slice input (consumed_len) (consumed_len + U32.v len) in
+  let s1 = Seq.slice input consumed_len (Seq.length input) in
+  let s2 = Seq.slice s1 0 (U32.v len) in
+  let _ : squash (s0 == s2) =
+    Seq.slice_slice input consumed_len (Seq.length input) 0 (U32.v len);
+    plus_0_r consumed_len
+  in
+  // assert == Seq.slice (Seq.slice input consumed_len (Seq.length input)) 0 (U32.v len));
+  parse_filter_intro_some (parse_bounded_integer sz) f input len consumed_len;
+  parse_fldata_intro_some p (U32.v len) s1 x;
+  parse_fldata_and_then_cases_injective sz f p;
+  parse_vldata_gen_kind_correct sz;
+  and_then_intro_some (parse_filter (parse_bounded_integer sz) f) (parse_vldata_payload sz f p) input len consumed_len x (U32.v len);
+  ()
+
 let unconstrained_bounded_integer
   (sz: integer_size)
   (i: bounded_integer sz)

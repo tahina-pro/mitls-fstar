@@ -105,6 +105,38 @@ let make_constant_size_parser
   make_constant_size_parser_injective sz t f;
   p
 
+let make_constant_size_parser_intro_some
+  (sz: nat)
+  (t: Type0)
+  (f: ((s: bytes {Seq.length s == sz}) -> GTot (option t)))
+  (input: bytes)
+  (x: t)
+: Lemma
+  (requires (
+    make_constant_size_parser_precond sz t f /\
+    Seq.length input >= sz /\
+    f (Seq.slice input 0 sz) == Some x
+  ))
+  (ensures (
+    parse (make_constant_size_parser sz t f) input == Some (x, sz)
+  ))
+= ()
+
+let make_constant_size_parser_intro_none
+  (sz: nat)
+  (t: Type0)
+  (f: ((s: bytes {Seq.length s == sz}) -> GTot (option t)))
+  (input: bytes)
+: Lemma
+  (requires (
+    make_constant_size_parser_precond sz t f /\
+    (Seq.length input >= sz ==> f (Seq.slice input 0 sz) == None)
+  ))
+  (ensures (
+    parse (make_constant_size_parser sz t f) input == None
+  ))
+= ()
+
 let make_total_constant_size_parser_precond
   (sz: nat)
   (t: Type0)
@@ -139,6 +171,35 @@ let make_total_constant_size_parser
 = let p : bare_parser t = make_constant_size_parser sz t (fun x -> Some (f x)) in
   p
 
+let make_total_constant_size_parser_intro_some
+  (sz: nat)
+  (t: Type0)
+  (f: ((s: bytes {Seq.length s == sz}) -> GTot t))
+  (input: bytes)
+: Lemma
+  (requires (
+    make_total_constant_size_parser_precond sz t f /\
+    Seq.length input >= sz
+  ))
+  (ensures (
+    parse (make_total_constant_size_parser sz t f) input == Some (f (Seq.slice input 0 sz), sz)
+  ))
+= ()
+
+let make_total_constant_size_parser_intro_none
+  (sz: nat)
+  (t: Type0)
+  (f: ((s: bytes {Seq.length s == sz}) -> GTot t))
+  (input: bytes)
+: Lemma
+  (requires (
+    make_total_constant_size_parser_precond sz t f /\
+    Seq.length input < sz
+  ))
+  (ensures (
+    parse (make_total_constant_size_parser sz t f) input == None
+  ))
+= ()
 
 (** Combinators *)
 
@@ -498,6 +559,69 @@ let and_then #k #t p #k' #t' p' =
   and_then_correct p p' ;
   f
 
+let and_then_intro_some
+  (#k: parser_kind)
+  (#t:Type)
+  (p:parser k t)
+  (#k': parser_kind)
+  (#t':Type)
+  (p': (t -> Tot (parser k' t')))
+  (input: bytes)
+  (d: t)
+  (consumed: nat)
+  (d' : t')
+  (consumed' : nat)
+: Lemma
+  (requires (
+    and_then_cases_injective p' /\
+    consumed + consumed' <= Seq.length input /\
+    parse p input == Some (d, consumed) /\ (
+    let input' = Seq.slice input consumed (Seq.length input) in
+    parse (p' d) input' == Some (d', consumed')
+  )))
+  (ensures (
+    parse (p `and_then` p') input == Some (d', consumed + consumed')
+  ))
+= ()
+
+let and_then_intro_none_l
+  (#k: parser_kind)
+  (#t:Type)
+  (p:parser k t)
+  (#k': parser_kind)
+  (#t':Type)
+  (p': (t -> Tot (parser k' t')))
+  (input: bytes)
+: Lemma
+  (requires (
+    and_then_cases_injective p' /\
+    None? (parse p input)
+  ))
+  (ensures (parse (p `and_then` p') input == None))
+= ()
+
+let and_then_intro_none_r
+  (#k: parser_kind)
+  (#t:Type)
+  (p:parser k t)
+  (#k': parser_kind)
+  (#t':Type)
+  (p': (t -> Tot (parser k' t')))
+  (input: bytes)
+  (d: t)
+  (consumed: nat)
+: Lemma
+  (requires (
+    and_then_cases_injective p' /\
+    consumed <= Seq.length input /\
+    parse p input == Some (d, consumed) /\ (
+    let input' = Seq.slice input consumed (Seq.length input) in
+    None? (parse (p' d) input')
+  )))
+  (ensures (parse (p `and_then` p') input == None))
+= ()
+
+
 (* Special case for non-dependent parsing *)
 
 let nondep_then
@@ -509,6 +633,73 @@ let nondep_then
   (p2: parser k2 t2)
 : Tot (parser (and_then_kind k1 k2) (t1 * t2))
 = p1 `and_then` (fun v1 -> p2 `and_then` (fun v2 -> (parse_ret (v1, v2))))
+
+#set-options "--z3rlimit 16"
+
+let nondep_then_intro_some
+  (#k1: parser_kind)
+  (#t1: Type0)
+  (p1: parser k1 t1)
+  (#k2: parser_kind)
+  (#t2: Type0)
+  (p2: parser k2 t2)
+  (input: bytes)
+  (d1: t1)
+  (consumed1: nat)
+  (d2: t2)
+  (consumed2: nat)
+: Lemma
+  (requires (
+    consumed1 + consumed2 <= Seq.length input /\
+    parse p1 input == Some (d1, consumed1) /\ (
+    let input2 = Seq.slice input consumed1 (Seq.length input) in
+    parse p2 input2 == Some (d2, consumed2)
+  )))
+  (ensures (
+    parse (p1 `nondep_then` p2) input == Some ((d1, d2), consumed1 + consumed2)
+  ))
+= ()
+
+#reset-options
+
+let nondep_then_intro_none_l
+  (#k1: parser_kind)
+  (#t1: Type0)
+  (p1: parser k1 t1)
+  (#k2: parser_kind)
+  (#t2: Type0)
+  (p2: parser k2 t2)
+  (input: bytes)
+: Lemma
+  (requires (
+    None? (parse p1 input)
+  ))
+  (ensures (
+    parse (p1 `nondep_then` p2) input == None
+  ))
+= ()
+
+let nondep_then_intro_none_r
+  (#k1: parser_kind)
+  (#t1: Type0)
+  (p1: parser k1 t1)
+  (#k2: parser_kind)
+  (#t2: Type0)
+  (p2: parser k2 t2)
+  (input: bytes)
+  (d1: t1)
+  (consumed1: nat)
+: Lemma
+  (requires (
+    consumed1 <= Seq.length input /\
+    parse p1 input == Some (d1, consumed1) /\ (
+    let input2 = Seq.slice input consumed1 (Seq.length input) in
+    None? (parse p2 input2)
+  )))
+  (ensures (
+    parse (p1 `nondep_then` p2) input == None
+  ))
+= ()
 
 #set-options "--z3rlimit 32"
 
@@ -686,6 +877,42 @@ let parse_strengthen
 = bare_parse_strengthen_correct p1 p2 prf;
   bare_parse_strengthen p1 p2 prf
 
+let parse_strengthen_intro_some
+  (#k: parser_kind)
+  (#t1: Type0)
+  (p1: parser k t1)
+  (p2: t1 -> GTot Type0)
+  (prf: parse_strengthen_prf p1 p2)
+  (input: bytes)
+  (d: t1)
+  (consumed: nat)
+: Lemma
+  (requires (
+    consumed <= Seq.length input /\
+    parse p1 input == Some (d, consumed)
+  ))
+  (ensures (
+    p2 d /\
+    parse (parse_strengthen p1 p2 prf) input == Some (d, consumed)
+  ))
+= prf input consumed d
+
+let parse_strengthen_intro_none
+  (#k: parser_kind)
+  (#t1: Type0)
+  (p1: parser k t1)
+  (p2: t1 -> GTot Type0)
+  (prf: parse_strengthen_prf p1 p2)
+  (input: bytes)
+: Lemma
+  (requires (
+    None? (parse p1 input)
+  ))
+  (ensures (
+    parse (parse_strengthen p1 p2 prf) input == None
+  ))
+= ()
+
 let serialize_strengthen'
   (#k: parser_kind)
   (#t1: Type0)
@@ -742,6 +969,41 @@ let parse_synth
   ))
   (ensures (fun _ -> True))
 = coerce (parser k t2) (and_then p1 (fun v1 -> parse_fret f2 v1))
+
+let parse_synth_intro_some
+  (#k: parser_kind)
+  (#t1: Type0)
+  (#t2: Type0)
+  (p1: parser k t1)
+  (f2: t1 -> GTot t2)
+  (input: bytes)
+  (d1: t1)
+  (consumed: nat)
+: Lemma
+  (requires (
+    (forall (x x' : t1) . f2 x == f2 x' ==> x == x') /\
+    consumed <= Seq.length input /\
+    parse p1 input == Some (d1, consumed)
+  ))
+  (ensures (
+    parse (parse_synth p1 f2) input == Some (f2 d1, consumed)
+  ))
+= ()
+
+let parse_synth_intro_none
+  (#k: parser_kind)
+  (#t1: Type0)
+  (#t2: Type0)
+  (p1: parser k t1)
+  (f2: t1 -> GTot t2)
+  (input: bytes)
+: Lemma
+  (requires (
+    (forall (x x' : t1) . f2 x == f2 x' ==> x == x') /\
+    None? (parse p1 input)
+  ))
+  (ensures (parse (parse_synth p1 f2) input == None))
+= ()
 
 let compose (#t1 #t2 #t3: Type) (f1: t1 -> GTot t2) (f2: t2 -> GTot t3) (x: t1) : GTot t3 =
   let y1 = f1 x in
@@ -879,6 +1141,51 @@ let parse_filter
   (f: (t -> GTot bool))
 : Tot (parser (parse_filter_kind k) (x: t { f x == true }))
 = p `and_then` (parse_filter_payload f)
+
+let parse_filter_intro_none_parse
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (f: (t -> GTot bool))
+  (input: bytes)
+: Lemma
+  (requires (None? (parse p input)))
+  (ensures (parse (parse_filter p f) input == None))
+= ()
+
+let parse_filter_intro_none_filter
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (f: (t -> GTot bool))
+  (input: bytes)
+  (d: t)
+  (consumed: nat)
+: Lemma
+  (requires (
+    consumed <= Seq.length input /\
+    parse p input == Some (d, consumed) /\
+    f d == false
+  ))
+  (ensures (parse (parse_filter p f) input == None))
+= ()
+
+let parse_filter_intro_some
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (f: (t -> GTot bool))
+  (input: bytes)
+  (d: t)
+  (consumed: nat)
+: Lemma
+  (requires (
+    consumed <= Seq.length input /\
+    parse p input == Some (d, consumed) /\
+    f d == true
+  ))
+  (ensures (parse (parse_filter p f) input == Some (d, consumed)))
+= ()
 
 let serialize_filter'
   (#k: parser_kind)

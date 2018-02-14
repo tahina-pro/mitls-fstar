@@ -65,6 +65,60 @@ let parse_fldata #b #t p sz =
   parse_fldata_injective p sz;
   parse_fldata' p sz  
 
+#set-options "--z3rlimit 16"
+
+let parse_fldata_intro_none_parse
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (sz: nat )
+  (input: bytes)
+: Lemma
+  (requires (
+    sz <= Seq.length input ==> (
+    let (cl : nat { 0 <= cl && cl <= Seq.length input } ) = sz in
+    None? (parse p (Seq.slice input 0 (cl)))
+  )))
+  (ensures (parse (parse_fldata p sz) input == None))
+= ()
+
+#set-options "--z3rlimit 32 --max_fuel 16"
+
+let parse_fldata_intro_none_fldata
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (sz: nat )
+  (input: bytes)
+  (d: t)
+  (consumed: nat)
+: Lemma
+  (requires (
+    sz <= Seq.length input /\
+    consumed <= sz /\ (
+    let (cl : nat { 0 <= cl && cl <= Seq.length input } ) = sz in
+    parse p (Seq.slice input 0 (cl)) == Some (d, consumed) /\
+    (consumed <: nat) <> (sz <: nat)
+  )))
+  (ensures (parse (parse_fldata p sz) input == None))
+= ()
+
+let parse_fldata_intro_some
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (sz: nat )
+  (input: bytes)
+  (d: t)
+: Lemma
+  (requires (
+    sz <= Seq.length input /\ (
+    let (cl : nat { 0 <= cl && cl <= Seq.length input } ) = sz in
+    parse p (Seq.slice input 0 (cl)) == Some (d, sz)
+  )))
+  (ensures (parse (parse_fldata p sz) input == Some (d, sz)))
+= ()
+
 val parse_fldata_consumes_all
   (#t: Type0)
   (p: bare_parser t)
@@ -93,6 +147,27 @@ let parse_fldata_consumes_all_correct
   (requires (k.parser_kind_subkind == Some ParserConsumesAll))
   (ensures (forall b . parse (parse_fldata p sz) b == parse (parse_fldata_consumes_all p sz) b))
 = ()
+
+let parse_fldata_intro_some_consumes_all
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (sz: nat)
+  (input: bytes)
+  (d: t)
+  (consumed: nat)
+: Lemma
+  (requires (
+    sz <= Seq.length input /\
+    k.parser_kind_subkind == Some ParserConsumesAll /\
+    consumed <= sz /\
+    parse p input == Some (d, consumed)
+  ))
+  (ensures (
+    parse (parse_fldata p sz) input == Some (d, sz) /\
+    consumed == sz
+  ))
+= parse_fldata_consumes_all_correct p sz
 
 let parse_fldata_strong_pred
   (#k: parser_kind)
@@ -138,6 +213,42 @@ let parse_fldata_strong
 = coerce_parser
   (parse_fldata_strong_t s sz)
   (parse_strengthen (parse_fldata p sz) (parse_fldata_strong_pred s sz) (parse_fldata_strong_correct s sz))
+
+let parse_fldata_strong_intro_some
+  (#k: parser_kind)
+  (#t: Type0)
+  (#p: parser k t)
+  (s: serializer p)
+  (sz: nat)
+  (input: bytes)
+  (d: t)
+  (consumed: nat)
+: Lemma
+  (requires (
+    consumed <= Seq.length input /\
+    parse (parse_fldata p sz) input == Some (d, consumed)
+  ))
+  (ensures (
+    parse_fldata_strong_pred s sz d /\
+    parse (parse_fldata_strong s sz) input == Some (d, consumed)
+  ))
+= parse_fldata_strong_correct s sz input consumed d
+
+let parse_fldata_strong_intro_none
+  (#k: parser_kind)
+  (#t: Type0)
+  (#p: parser k t)
+  (s: serializer p)
+  (sz: nat)
+  (input: bytes)
+: Lemma
+  (requires (
+    None? (parse (parse_fldata p sz) input)
+  ))
+  (ensures (
+    parse (parse_fldata_strong s sz) input == None
+  ))
+= ()
 
 #set-options "--z3rlimit 16"
 

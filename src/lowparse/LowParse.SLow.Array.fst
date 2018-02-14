@@ -96,7 +96,7 @@ let parse32_vlarray
     (parse_vlarray_correct p array_byte_size_min array_byte_size_max precond)
 
 assume
-val serialize32_bounded_vldata_strong
+val serialize32_vlarray
   (min: nat)
   (max: nat { min <= max /\ max > 0 /\ max < 4294967292 } ) // NOTE here: max must be less than 2^32 - 4
   (#k: parser_kind)
@@ -107,4 +107,4 @@ val serialize32_bounded_vldata_strong
   (array_byte_size_min array_byte_size_max: nat)
   (precond: unit {vlarray_type_of_parser_kind_precond p array_byte_size_min array_byte_size_max == true})
   (lprecond: unit { serialize_list_precond k } )
-: Tot (serializer32 (serialize_bounded_vldata_strong min max s))
+: Tot (serializer32 (serialize_vlarray s array_byte_size_min array_byte_size_max))
