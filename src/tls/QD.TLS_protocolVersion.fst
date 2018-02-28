@@ -14,8 +14,8 @@ inline_for_extraction let protocolVersion_enum : LP.enum protocolVersion UInt16.
     TLS_1p3, 772us;
   ] in
   [@inline_let] let no_dups =
-    assert_norm (L.noRepeats (L.map fst e));
-    assert_norm (L.noRepeats (L.map snd e))
+    assert_norm (L.noRepeats (LP.list_map fst e));
+    assert_norm (L.noRepeats (LP.list_map snd e))
   in e
 
 inline_for_extraction let synth_protocolVersion' (x:LP.maybe_enum_key protocolVersion_enum) : Tot protocolVersion' = 
@@ -27,8 +27,7 @@ inline_for_extraction let synth_protocolVersion' (x:LP.maybe_enum_key protocolVe
     Unknown_protocolVersion v
 
 let lemma_synth_protocolVersion'_inj () : Lemma
-  (forall (x1 x2: LP.maybe_enum_key protocolVersion_enum).
-    synth_protocolVersion' x1 == synth_protocolVersion' x2 ==> x1 == x2) = ()
+  (LP.synth_injective synth_protocolVersion') = ()
 
 inline_for_extraction let synth_protocolVersion'_inv (x:protocolVersion') : Tot (LP.maybe_enum_key protocolVersion_enum) = 
   match x with
@@ -42,7 +41,7 @@ inline_for_extraction let synth_protocolVersion'_inv (x:protocolVersion') : Tot 
     LP.Known (x1 <: LP.enum_key protocolVersion_enum)
 
 let lemma_synth_protocolVersion'_inv () : Lemma
-  (forall (x: LP.maybe_enum_key protocolVersion_enum). synth_protocolVersion'_inv (synth_protocolVersion' x) == x) = ()
+  (LP.synth_inverse synth_protocolVersion' synth_protocolVersion'_inv) = ()
 
 let parse_maybe_protocolVersion_key : LP.parser _ (LP.maybe_enum_key protocolVersion_enum) =
   LP.parse_maybe_enum_key LP.parse_u16 protocolVersion_enum
@@ -78,7 +77,7 @@ let serialize_protocolVersion'_spec () = serialize_protocolVersion'_spec'
 
 inline_for_extraction let serialize32_maybe_protocolVersion_key : LP.serializer32 serialize_maybe_protocolVersion_key =
   FStar.Tactics.synth_by_tactic (LP.serialize32_maybe_enum_key_tac
-    #_ #_ #_ #LP.parse_u16 #LP.serialize_u16 // FIXME(implicits for machine int parsers)
+    #_ #_ #_ #LP.parse_u16 #LP.serialize_u16 // FIXME(implicits for machine int parsers), see FStar #1384
     LP.serialize32_u16 protocolVersion_enum serialize_maybe_protocolVersion_key ())
 
 inline_for_extraction
@@ -88,42 +87,3 @@ let serialize_protocolVersion'_aux : LP.serializer32 serialize_protocolVersion'_
   LP.serialize32_synth _ synth_protocolVersion' _ serialize32_maybe_protocolVersion_key synth_protocolVersion'_inv (fun x->synth_protocolVersion'_inv x) ()
 
 let serialize_protocolVersion' x = serialize_protocolVersion'_aux x
-
-(*
-let protocolVersion_bytes x =
-  LowParseWrappers.wrap_serializer32_constant_length serialize32_protocolVersion' 2 () x
-
-open FStar.Error
-
-inline_for_extraction
-let parse_protocolVersion_error_msg : string =
-  FStar.Error.perror __SOURCE_FILE__ __LINE__ ""
-
-let parse_protocolVersion' x =
-  LowParseWrappers.wrap_parser32_constant_length serialize32_protocolVersion' 2 () parse32_protocolVersion' parse_protocolVersion_error_msg x
-
-(* TODO: use LP.parse32/serialize32_enum_key instead. The problem here
-is that we want to prove that the same serializer will work for both
-protocolVersion' and protocolVersion, for which the proof will take
-10 seconds instead of 1. *)
-
-let parse_protocolVersion x =
-  let k : result protocolVersion' = parse_protocolVersion' x in
-  match k with
-  | Correct c ->
-    if Unknown_protocolVersion? c
-    then
-      Error (AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
-    else begin
-      Correct c
-    end
-  | _ ->
-    assert (Error? k); // FIXME: WHY WHY WHY is this assert necessary? If not there, then proof fails.
-    let (Error e) = k in
-    Error e
-
-let inverse_protocolVersion' x =
-  LowParseWrappers.lemma_inverse_serializer32_parser32_constant_length serialize32_protocolVersion' 2 () parse32_protocolVersion' parse_protocolVersion_error_msg x
-
-let pinverse_protocolVersion' x =
-  LowParseWrappers.lemma_pinverse_serializer32_parser32_constant_length serialize32_protocolVersion' 2 () parse32_protocolVersion' parse_protocolVersion_error_msg x

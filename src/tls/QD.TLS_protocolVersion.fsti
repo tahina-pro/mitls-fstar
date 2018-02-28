@@ -1,10 +1,6 @@
 module QD.TLS_protocolVersion
 
-open FStar.Bytes
-open TLSError
-open Parse
-
-open LowParse.SLow.Base
+module LP = LowParse.SLow.Base
 
 type protocolVersion' =
   | SSL_3p0
@@ -17,20 +13,20 @@ type protocolVersion' =
 type protocolVersion = v:protocolVersion'{~(Unknown_protocolVersion? v)}
 
 inline_for_extraction
-val parse_protocolVersion'_kind : (x: parser_kind {
-  x.parser_kind_subkind == Some ParserStrong /\
-  x.parser_kind_high == Some x.parser_kind_low /\
-  x.parser_kind_low == 2
+val parse_protocolVersion'_kind : (x: LP.parser_kind {
+  x.LP.parser_kind_subkind == Some LP.ParserStrong /\
+  x.LP.parser_kind_high == Some x.LP.parser_kind_low /\
+  x.LP.parser_kind_low == 2
 })
 
-inline_for_extraction // should be: noextract
-val parse_protocolVersion'_spec : unit -> Tot (parser parse_protocolVersion'_kind protocolVersion')
+inline_for_extraction
+val parse_protocolVersion'_spec : unit -> Tot (LP.parser parse_protocolVersion'_kind protocolVersion')
 
 inline_for_extraction
-val parse_protocolVersion' : parser32 (parse_protocolVersion'_spec ())
-
-inline_for_extraction // should be: noextract
-val serialize_protocolVersion'_spec : unit -> Tot (serializer (parse_protocolVersion'_spec ()))
+val parse_protocolVersion' : LP.parser32 (parse_protocolVersion'_spec ())
 
 inline_for_extraction
-val serialize_protocolVersion' : serializer32 (serialize_protocolVersion'_spec ())
+val serialize_protocolVersion'_spec : unit -> Tot (LP.serializer (parse_protocolVersion'_spec ()))
+
+inline_for_extraction
+val serialize_protocolVersion' : LP.serializer32 (serialize_protocolVersion'_spec ())
