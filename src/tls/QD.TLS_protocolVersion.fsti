@@ -4,6 +4,8 @@ open FStar.Bytes
 open TLSError
 open Parse
 
+open LowParse.SLow.Base
+
 type protocolVersion' =
   | SSL_3p0
   | TLS_1p0
@@ -14,14 +16,21 @@ type protocolVersion' =
 
 type protocolVersion = v:protocolVersion'{~(Unknown_protocolVersion? v)}
 
-inline_for_extraction val protocolVersion_bytes: protocolVersion' -> Tot (lbytes 2)
-inline_for_extraction val parse_protocolVersion': lbytes 2 -> result protocolVersion'
-inline_for_extraction val parse_protocolVersion: lbytes 2 -> result protocolVersion
+inline_for_extraction
+val parse_protocolVersion'_kind : (x: parser_kind {
+  x.parser_kind_subkind == Some ParserStrong /\
+  x.parser_kind_high == Some x.parser_kind_low /\
+  x.parser_kind_low == 2
+})
 
-val inverse_protocolVersion' (x:_) : Lemma
-  (requires True)
-  (ensures lemma_inverse_g_f protocolVersion_bytes parse_protocolVersion' x)
+inline_for_extraction // should be: noextract
+val parse_protocolVersion'_spec : unit -> Tot (parser parse_protocolVersion'_kind protocolVersion')
 
-val pinverse_protocolVersion' (x:_) : Lemma
-  (requires True)
-  (ensures lemma_pinverse_f_g equal protocolVersion_bytes parse_protocolVersion' x)
+inline_for_extraction
+val parse_protocolVersion' : parser32 (parse_protocolVersion'_spec ())
+
+inline_for_extraction // should be: noextract
+val serialize_protocolVersion'_spec : unit -> Tot (serializer (parse_protocolVersion'_spec ()))
+
+inline_for_extraction
+val serialize_protocolVersion' : serializer32 (serialize_protocolVersion'_spec ())

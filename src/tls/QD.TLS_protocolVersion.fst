@@ -50,32 +50,46 @@ let parse_maybe_protocolVersion_key : LP.parser _ (LP.maybe_enum_key protocolVer
 let serialize_maybe_protocolVersion_key : LP.serializer parse_maybe_protocolVersion_key =
   LP.serialize_maybe_enum_key LP.parse_u16 LP.serialize_u16 protocolVersion_enum
 
-let spec_parse_protocolVersion' : LP.parser _ protocolVersion' =
+let parse_protocolVersion'_kind =
+  LP.parse_u16_kind
+
+let parse_protocolVersion'_spec' =
   lemma_synth_protocolVersion'_inj ();
   parse_maybe_protocolVersion_key `LP.parse_synth` synth_protocolVersion'
 
-let serialize_protocolVersion' : LP.serializer spec_parse_protocolVersion' =
-  lemma_synth_protocolVersion'_inj ();
-  lemma_synth_protocolVersion'_inv ();
-  LP.serialize_synth _ synth_protocolVersion' serialize_maybe_protocolVersion_key synth_protocolVersion'_inv ()
+let parse_protocolVersion'_spec () = parse_protocolVersion'_spec'
 
 inline_for_extraction let parse32_maybe_protocolVersion_key : LP.parser32 parse_maybe_protocolVersion_key =
   FStar.Tactics.synth_by_tactic (LP.parse32_maybe_enum_key_tac LP.parse32_u16 protocolVersion_enum parse_maybe_protocolVersion_key ())
 
-inline_for_extraction let parse32_protocolVersion' : LP.parser32 spec_parse_protocolVersion' =
+inline_for_extraction
+let parse_protocolVersion'_aux : LP.parser32 parse_protocolVersion'_spec' =
   lemma_synth_protocolVersion'_inj ();
   LP.parse32_synth _ synth_protocolVersion' (fun x->synth_protocolVersion' x) parse32_maybe_protocolVersion_key ()
+
+let parse_protocolVersion' x = parse_protocolVersion'_aux x
+
+let serialize_protocolVersion'_spec' : LP.serializer parse_protocolVersion'_spec' =
+  lemma_synth_protocolVersion'_inj ();
+  lemma_synth_protocolVersion'_inv ();
+  LP.serialize_synth _ synth_protocolVersion' serialize_maybe_protocolVersion_key synth_protocolVersion'_inv ()
+
+let serialize_protocolVersion'_spec () = serialize_protocolVersion'_spec'
 
 inline_for_extraction let serialize32_maybe_protocolVersion_key : LP.serializer32 serialize_maybe_protocolVersion_key =
   FStar.Tactics.synth_by_tactic (LP.serialize32_maybe_enum_key_tac
     #_ #_ #_ #LP.parse_u16 #LP.serialize_u16 // FIXME(implicits for machine int parsers)
     LP.serialize32_u16 protocolVersion_enum serialize_maybe_protocolVersion_key ())
 
-inline_for_extraction let serialize32_protocolVersion' : LP.serializer32 serialize_protocolVersion' =
+inline_for_extraction
+let serialize_protocolVersion'_aux : LP.serializer32 serialize_protocolVersion'_spec' =
   lemma_synth_protocolVersion'_inj ();
   lemma_synth_protocolVersion'_inv ();
   LP.serialize32_synth _ synth_protocolVersion' _ serialize32_maybe_protocolVersion_key synth_protocolVersion'_inv (fun x->synth_protocolVersion'_inv x) ()
 
+let serialize_protocolVersion' x = serialize_protocolVersion'_aux x
+
+(*
 let protocolVersion_bytes x =
   LowParseWrappers.wrap_serializer32_constant_length serialize32_protocolVersion' 2 () x
 

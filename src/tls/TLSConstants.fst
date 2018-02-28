@@ -43,6 +43,8 @@ let rec fold_string (#a:Type)
     | a::al -> let accum = accum ^ sep ^ f a in
              fold_string f accum sep al
 
+#set-options "--max_fuel 2 --initial_fuel 2 --max_ifuel 1 --initial_ifuel 1"
+
 (* Some basic utility functions for closure converting arguments
    to the higher-order combinators in the list library ...
    for use with KreMLin extraction *)
@@ -136,11 +138,16 @@ let is_pv_13 = function
 #set-options "--max_fuel 0 --initial_fuel 0 --max_ifuel 1 --initial_ifuel 1"
 
 (** Serializing function for the protocol version *)
-let versionBytes : protocolVersion' -> Tot (lbytes 2) =
-  protocolVersion_bytes
+let versionBytes (x : protocolVersion') : Tot (lbytes 2) =
+  LowParseWrappers.wrap_serializer32_constant_length serialize_protocolVersion' 2 () x
+
+inline_for_extraction
+let parse_protocolVersion_error_msg : string =
+  FStar.Error.perror __SOURCE_FILE__ __LINE__ ""
 
 val parseVersion: pinverse_t versionBytes
-let parseVersion = parse_protocolVersion'
+let parseVersion x =
+  LowParseWrappers.wrap_parser32_constant_length serialize_protocolVersion' 2 () parse_protocolVersion' parse_protocolVersion_error_msg x
 
 // DRAFT#23
 // to be used *only* in ServerHello.version.
