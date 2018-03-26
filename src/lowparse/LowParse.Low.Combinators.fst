@@ -224,3 +224,26 @@ val nondep_then_snd
 let nondep_then_snd #k1 #t1 #p1 p1' #k2 #t2 #p2 p2' input sz =
   p1' input sz;
   validate_nochk_truncate32 p2 p2' input sz
+
+inline_for_extraction
+let make_total_constant_size_parser32
+  (sz: nat)
+  (sz' : U32.t { U32.v sz' == sz } )
+  (#t: Type0)
+  (f: ((s: bytes {Seq.length s == sz}) -> GTot (t)))
+  (u: unit {
+    make_total_constant_size_parser_precond sz t f
+  })
+  (f' : ((s: buffer8) -> HST.Stack t
+    (requires (fun h -> B.live h s /\ B.length s == sz))
+    (ensures (fun h res h' ->
+      h == h' /\
+      res == f (B.as_seq h s)
+  ))))
+: Tot (parser32 (make_total_constant_size_parser sz t f))
+= fun (input: pointer buffer8) (len: pointer U32.t) ->
+  let b0 = B.index input 0ul in
+  let b = B.sub b0 0ul sz' in
+  let res = f' b in
+  advance_slice_ptr input len sz';
+  res
