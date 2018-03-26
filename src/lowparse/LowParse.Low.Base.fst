@@ -107,6 +107,41 @@ let validator32
     validator32_postcond p input sz h res h'
   ))
 
+let parser32
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+: Tot Type0
+= (input: pointer buffer8) ->
+  (sz: pointer U32.t) ->
+  HST.Stack t
+  (requires (fun h ->
+    is_slice_ptr h input sz /\
+    Some? (parse p (B.as_seq h (B.get h input 0)))
+  ))
+  (ensures (fun h res h' ->
+    let ps = parse p (B.as_seq h (B.get h input 0)) in
+    let (Some (res', _)) = ps in
+    res == res' /\
+    validator32_postcond p input sz h true h'
+  ))
+
+let validator_nochk32
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+: Tot Type0
+= (input: pointer buffer8) ->
+  (sz: pointer U32.t) ->
+  HST.Stack unit
+  (requires (fun h ->
+    is_slice_ptr h input sz /\
+    Some? (parse p (B.as_seq h (B.get h input 0)))
+  ))
+  (ensures (fun h res h' ->
+    validator32_postcond p input sz h true h'
+  ))
+
 inline_for_extraction
 let truncate_slice_ptr
   (b: pointer buffer8)
