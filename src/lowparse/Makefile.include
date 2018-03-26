@@ -45,8 +45,14 @@ LOWPARSE_SLOW_FILES= \
         LowParseExample2.fst \
 
 
+LOWPARSE_LOW_FILES= \
+        LowParse.Low.Base.fst \
+        LowParse.Low.Combinators.fst \
+
+
 LOWPARSE_FILES= \
 	$(LOWPARSE_SPEC_FILES) \
 	$(LOWPARSE_SLOW_FILES) \
+        $(LOWPARSE_LOW_FILES) \
 
 
