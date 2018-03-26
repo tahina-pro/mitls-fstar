@@ -156,3 +156,71 @@ let validate_nochk_truncate32 #k #t p v input sz =
     assert (no_lookahead_weak_on p (B.as_seq h (B.get h input 0)) (B.as_seq h' (B.get h' input 0)))
   in
   f ()
+
+inline_for_extraction
+val nondep_then_fst
+  (#k1: parser_kind)
+  (#t1: Type0)
+  (#p1: parser k1 t1)
+  (p1' : validator_nochk32 p1)
+  (#k2: parser_kind)
+  (#t2: Type0)
+  (p2: parser k2 t2)
+  (input: pointer buffer8)
+  (sz: pointer U32.t)
+: HST.Stack unit
+  (requires (fun h ->
+    is_slice_ptr h input sz /\
+    Some? (parse (p1 `nondep_then` p2) (B.as_seq h (B.get h input 0)))
+  ))
+  (ensures (fun h _ h' ->
+    B.modifies_2 input sz h h' /\
+    is_slice_ptr h' input sz /\ (
+    let (Some (res1, consumed1)) = parse p1 (B.as_seq h (B.get h input 0)) in
+    U32.v (B.get h' sz 0) == consumed1 /\
+    B.get h' input 0 == B.sub (B.get h input 0) 0ul (U32.uint_to_t consumed1) /\ (
+    let ps1' = parse p1 (B.as_seq h' (B.get h' input 0)) in
+    Some? ps1' /\ (
+    let (Some (res1', consumed1')) = parse p1 (B.as_seq h' (B.get h' input 0)) in
+    res1 == res1' /\
+    (consumed1 <: nat) == (consumed1' <: nat)
+  )))))
+
+let nondep_then_fst #k1 #t1 #p1 p1' #k2 #t2 p2 input sz =
+  validate_nochk_truncate32 p1 p1' input sz
+
+inline_for_extraction
+val nondep_then_snd
+  (#k1: parser_kind)
+  (#t1: Type0)
+  (#p1: parser k1 t1)
+  (p1' : validator_nochk32 p1)
+  (#k2: parser_kind)
+  (#t2: Type0)
+  (#p2: parser k2 t2)
+  (p2' : validator_nochk32 p2)
+  (input: pointer buffer8)
+  (sz: pointer U32.t)
+: HST.Stack unit
+  (requires (fun h ->
+    is_slice_ptr h input sz /\
+    Some? (parse (p1 `nondep_then` p2) (B.as_seq h (B.get h input 0)))
+  ))
+  (ensures (fun h _ h' ->
+    B.modifies_2 input sz h h' /\
+    is_slice_ptr h' input sz /\ (
+    let sq = B.as_seq h (B.get h input 0) in
+    let (Some (_, consumed1)) = parse p1 sq in
+    let (Some (res2, consumed2)) = parse p2 (Seq.slice sq consumed1 (Seq.length sq)) in
+    U32.v (B.get h' sz 0) == consumed2 /\
+    B.get h' input 0 == B.sub (B.get h input 0) (U32.uint_to_t consumed1) (U32.uint_to_t consumed2) /\ (
+    let ps2' = parse p2 (B.as_seq h' (B.get h' input 0)) in
+    Some? ps2' /\ (
+    let (Some (res2', consumed2')) = parse p2 (B.as_seq h' (B.get h' input 0)) in
+    res2 == res2' /\
+    (consumed2 <: nat) == (consumed2' <: nat)
+  )))))
+
+let nondep_then_snd #k1 #t1 #p1 p1' #k2 #t2 #p2 p2' input sz =
+  p1' input sz;
+  validate_nochk_truncate32 p2 p2' input sz
