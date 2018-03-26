@@ -47,6 +47,7 @@ LOWPARSE_SLOW_FILES= \
 
 
 LOWPARSE_LOW_FILES= \
+        LowParse.BigEndianImpl.Low.fst \
         LowParse.Low.Base.fst \
         LowParse.Low.Combinators.fst \
 
