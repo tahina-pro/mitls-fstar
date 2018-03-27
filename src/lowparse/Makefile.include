@@ -48,6 +48,7 @@ LOWPARSE_SLOW_FILES= \
 LOWPARSE_IMPL_FILES= \
         LowParse.Slice.fst \
         LowParse.Impl.Base.fst \
+        LowParse.Impl.Combinators.fst \
 
 
 LOWPARSE_FILES= \

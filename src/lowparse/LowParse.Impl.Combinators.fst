@@ -246,7 +246,7 @@ val nondep_destruct
     v == (v1, v2)
   ))))))
 
-#set-options "--z3rlimit 64"
+#set-options "--z3rlimit 128"
 
 let nondep_destruct #k1 #t1 #p1 st1 #k2 #t2 p2 input =
   split st1 input
@@ -286,9 +286,9 @@ let serialize_copy #k #t p dest src =
   (destl, destr)
 
 val serialize_nondep_then_correct
-  (#k1: strong_parser_kind)
+  (#k1: parser_kind)
   (#t1: Type0)
-  (p1: parser (ParserStrong k1) t1)
+  (p1: parser k1 t1)
   (#k2: parser_kind)
   (#t2: Type0)
   (p2: parser k2 t2)
@@ -296,6 +296,7 @@ val serialize_nondep_then_correct
   (h: HS.mem)
 : Lemma
   (requires (
+    k1.parser_kind_subkind == Some ParserStrong /\
     S.is_concat b b1 b2 /\
     exactly_parses h p1 b1 (fun _ -> True) /\
     exactly_parses h p2 b2 (fun _ -> True)
@@ -317,15 +318,16 @@ let serialize_nondep_then_correct #k1 #t1 p1 #k2 #t2 p2 b b1 b2 h =
 
 inline_for_extraction
 val serialize_nondep_then
-  (#k1: strong_parser_kind)
+  (#k1: parser_kind)
   (#t1: Type0)
-  (p1: parser (ParserStrong k1) t1)
+  (p1: parser k1 t1)
   (#k2: parser_kind)
   (#t2: Type0)
   (p2: parser k2 t2)
   (dest src1 src2: S.bslice)
 : HST.Stack (S.bslice * S.bslice)
   (requires (fun h ->
+    k1.parser_kind_subkind == Some ParserStrong /\
     S.disjoint dest src1 /\
     S.disjoint dest src2 /\
     S.live h dest /\
@@ -437,10 +439,14 @@ let serialize_synth_correct #k #t1 #t2 p1 f2 b h = ()
 
 inline_for_extraction
 let validate_constant_size_nochk
-  (#k: constant_size_parser_kind)
+  (#k: parser_kind)
   (sz: U32.t)
   (#t: Type0)
-  (p: parser (ParserStrong (StrongConstantSize (U32.v sz) k)) t)
+  (p: parser k t)
+  (u: unit {
+    k.parser_kind_high == Some k.parser_kind_low /\
+    k.parser_kind_low == U32.v sz
+  })
 : Tot (stateful_validator_nochk p)
 = fun input -> 
     let h = HST.get () in
@@ -450,8 +456,14 @@ let validate_constant_size_nochk
 inline_for_extraction
 let validate_total_constant_size
   (sz: U32.t)
+  (#k: parser_kind)
   (#t: Type0)
-  (p: parser (ParserStrong (StrongConstantSize (U32.v sz) ConstantSizeTotal)) t)
+  (p: parser k t)
+  (u: unit {
+    k.parser_kind_high == Some k.parser_kind_low /\
+    k.parser_kind_low == U32.v sz /\
+    k.parser_kind_metadata.parser_kind_metadata_total == true
+  })
 : Tot (stateful_validator p)
 = fun s ->
   if U32.lt (S.length s) sz
@@ -465,8 +477,9 @@ let validate_total_constant_size
 inline_for_extraction
 let parse_total_constant_size_nochk
   (sz: U32.t)
+  (#k: parser_kind)
   (#t: Type0)
-  (#p: parser (ParserStrong (StrongConstantSize (U32.v sz) ConstantSizeTotal)) t)
+  (#p: parser k t)
   (ps: (
     (input: S.bslice) ->
     HST.Stack t
@@ -484,6 +497,11 @@ let parse_total_constant_size_nochk
       let (Some (v', _)) = y in
       v == v'
   ))))))
+  (u: unit {
+    k.parser_kind_high == Some k.parser_kind_low /\
+    k.parser_kind_low == U32.v sz /\
+    k.parser_kind_metadata.parser_kind_metadata_total == true
+  })
 : Tot (parser_st_nochk p)
 = fun s ->
   let sz : consumed_slice_length s = sz in
@@ -492,9 +510,15 @@ let parse_total_constant_size_nochk
 inline_for_extraction
 let parse_total_constant_size
   (sz: U32.t)
+  (#k: parser_kind)
   (#t: Type0)
-  (#p: parser (ParserStrong (StrongConstantSize (U32.v sz) ConstantSizeTotal)) t)
+  (#p: parser k t)
   (ps: (parser_st_nochk p))
+  (u: unit {
+    k.parser_kind_high == Some k.parser_kind_low /\
+    k.parser_kind_low == U32.v sz /\
+    k.parser_kind_metadata.parser_kind_metadata_total == true
+  })
 : Tot (parser_st p)
 = fun s ->
   if U32.lt (S.length s) sz
@@ -678,6 +702,7 @@ let parse_filter_st'
 
 #reset-options
 
+(* TODO: move if_combinator from LowParse.SLow.Sum to LowParse.Spec.Base
 inline_for_extraction
 let validate_if
   (#t: Type0)
