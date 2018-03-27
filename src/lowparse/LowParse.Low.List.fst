@@ -56,7 +56,13 @@ let validate32_list_body
   if len' = 0ul
   then true
   else if v input len
-  then false
+  then
+    if B.index len 0ul = len'
+    then begin
+      B.upd len 0ul 4294967295ul;
+      true
+    end
+    else false
   else begin
     B.upd len 0ul 4294967295ul;
     true
