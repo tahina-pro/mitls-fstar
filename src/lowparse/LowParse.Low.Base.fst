@@ -76,12 +76,11 @@ let validator32_postcond
   (h' : HS.mem)
 : GTot Type0
 = is_slice_ptr h input sz /\
-  B.modifies_2 input sz h h' /\
-  is_slice_ptr h' input sz /\ (
-//  tail_ptr h h' input /\ (
+  B.modifies_2 input sz h h' /\ (
     let pv = parse p (B.as_seq h (B.get h input 0)) in
     if res
     then
+      is_slice_ptr h' input sz /\
       Some? pv /\ (
         let Some (_, consumed) = pv in
         let len' = U32.uint_to_t (U32.v (B.get h sz 0) - consumed) in
@@ -89,6 +88,8 @@ let validator32_postcond
         B.get h' sz 0 == len'
       )
     else
+      B.live h' input /\
+      B.live h' sz /\
       None? pv
   )
 
