@@ -45,8 +45,14 @@ LOWPARSE_SLOW_FILES= \
         LowParseExample2.fst \
 
 
+LOWPARSE_IMPL_FILES= \
+        LowParse.Slice.fst \
+        LowParse.Impl.Base.fst \
+
+
 LOWPARSE_FILES= \
 	$(LOWPARSE_SPEC_FILES) \
 	$(LOWPARSE_SLOW_FILES) \
+        $(LOWPARSE_IMPL_FILES) \
 
 
