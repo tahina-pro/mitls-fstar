@@ -162,3 +162,158 @@ let advance_slice_ptr
   let b' = B.sub b0 ofs len' in
   B.upd b 0ul b' ;
   B.upd len 0ul len'
+
+abstract
+let rec is_buffer_concat
+  (#t: Type)
+  (b: B.buffer t)
+  (l: list (B.buffer t))
+: GTot Type0
+  (decreases l)
+= match l with
+  | [] -> False
+  | [b'] -> b == b'
+  | b1 :: q ->
+    B.length b1 <= B.length b /\ (
+      let len1 = U32.uint_to_t (B.length b1) in
+      b1 == B.sub b 0ul len1 /\
+      B.sub b len1 (U32.uint_to_t (B.length b - B.length b1)) `is_buffer_concat` q
+    )
+
+abstract
+let is_buffer_concat_singleton
+  (#t: Type)
+  (b1 b2: B.buffer t)
+: Lemma
+  (is_buffer_concat b1 [b2] <==> b1 == b2)
+  [SMTPat (is_buffer_concat b1 [b2])]
+= ()
+
+abstract
+let is_buffer_concat_pair
+  (#t: Type)
+  (b b1 b2: B.buffer t)
+: Lemma
+  (is_buffer_concat b [b1; b2] <==> (
+    B.length b1 + B.length b2 == B.length b /\
+    b1 == B.sub b 0ul (U32.uint_to_t (B.length b1)) /\
+    b2 == B.sub b (U32.uint_to_t (B.length b1)) (U32.uint_to_t (B.length b2))
+  ))
+  [SMTPat (is_buffer_concat b [b1; b2])]
+= ()
+
+abstract
+let is_buffer_concat_cons
+  (#t: Type)
+  (b b1: B.buffer t)
+  (q: list (B.buffer t))
+: Lemma
+  (is_buffer_concat b (b1 :: q) <==> (
+    B.length b1 <= B.length b /\ (
+    let len1 = U32.uint_to_t (B.length b1) in
+    b1 == B.sub b 0ul len1 /\ (
+    if Cons? q
+    then
+      B.sub b len1 (U32.uint_to_t (B.length b - B.length b1)) `is_buffer_concat` q
+    else
+      b == b1
+  ))))
+  [SMTPat (is_buffer_concat b (b1 :: q))]
+= ()
+
+module L = FStar.List.Tot
+
+#set-options "--z3rlimit 16"
+
+abstract
+private
+let rec is_buffer_concat_subst_l
+  (#t: Type)
+  (b b': B.buffer t)
+  (l' l2: list (B.buffer t))
+: Lemma
+  (requires (
+    b `is_buffer_concat` (b' :: l2) /\
+    b' `is_buffer_concat` l'
+  ))
+  (ensures (
+    b `is_buffer_concat` (l' `L.append` l2)
+  ))
+  (decreases l')
+= match l' with
+  | [_] -> ()
+  | bq :: q ->
+    let len_bq = U32.uint_to_t (B.length bq) in
+    is_buffer_concat_subst_l
+      (B.sub b len_bq (U32.uint_to_t (B.length b - B.length bq)))
+      (B.sub b' len_bq (U32.uint_to_t (B.length b' - B.length bq)))
+      q
+      l2
+
+abstract
+let rec is_buffer_concat_subst
+  (#t: Type)
+  (b b': B.buffer t)
+  (l1 l' l2: list (B.buffer t))
+: Lemma
+  (requires (
+    b `is_buffer_concat` (l1 `L.append` (b' :: l2)) /\
+    b' `is_buffer_concat` l'
+  ))
+  (ensures (
+    b `is_buffer_concat` (l1 `L.append` (l' `L.append` l2))
+  ))
+  (decreases l1)
+= match l1 with
+  | [] -> is_buffer_concat_subst_l b b' l' l2
+  | bq :: q ->
+    let len_bq = U32.uint_to_t (B.length bq) in
+    is_buffer_concat_subst
+      (B.sub b len_bq (U32.uint_to_t (B.length b - B.length bq)))
+      b'
+      q
+      l'
+      l2
+
+abstract
+let rec is_buffer_concat_includes
+  (#t: Type)
+  (b b' : B.buffer t)
+  (l1 l2: list (B.buffer t))
+: Lemma
+  (requires (b `is_buffer_concat` (l1 `L.append` (b' :: l2))))
+  (ensures (b `B.includes` b'))
+  (decreases l1)
+= match l1 with
+  | [] -> ()
+  | bq :: q ->
+    is_buffer_concat_includes
+      (B.sub b (U32.uint_to_t (B.length bq)) (U32.uint_to_t (B.length b - B.length bq)))
+      b'
+      q
+      l2
+
+abstract
+let rec is_buffer_concat_disjoint
+  (#t: Type)
+  (b b1 b2: B.buffer t)
+  (l0 l1 l2: list (B.buffer t))
+: Lemma
+  (requires (b `is_buffer_concat` (l0 `L.append` (b1 :: (l1 `L.append` (b2 :: l2))))))
+  (ensures (B.disjoint b1 b2))
+  (decreases l0)
+= match l0 with
+  | [] ->
+    is_buffer_concat_includes
+      (B.sub b (U32.uint_to_t (B.length b1)) (U32.uint_to_t (B.length b - B.length b1)))
+      b2
+      l1
+      l2
+  | bq :: q ->
+    is_buffer_concat_disjoint
+      (B.sub b (U32.uint_to_t (B.length bq)) (U32.uint_to_t (B.length b - B.length bq)))
+      b1
+      b2
+      q
+      l1
+      l2
