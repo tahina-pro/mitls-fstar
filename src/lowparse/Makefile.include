@@ -53,6 +53,7 @@ LOWPARSE_LOW_FILES= \
         LowParse.Low.Int.Aux.fst \
         LowParse.Low.Int.fsti \
         LowParse.Low.Int.fst \
+        LowParse.Low.List.fst \
 
 
 LOWPARSE_FILES= \

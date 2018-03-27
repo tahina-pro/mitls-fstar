@@ -43,27 +43,8 @@ let tail_ptr (h h' : HS.mem) (#t: Type) (p: pointer (B.buffer t)) =
     let b' = B.get h' p 0 in
     B.live h b /\
     B.live h' b /\
-    B.as_seq h' b == B.as_seq h b /\
     b' `is_tail_of` b
   )
-
-let buffer_as_seq_subtract (h: HS.mem) (#t: Type) (b b' : B.buffer t) : Ghost (Seq.seq t)
-  (requires (b' `is_tail_of` b /\ B.live h b))
-  (ensures (fun y -> B.as_seq h b == Seq.append y (B.as_seq h b')))
-= let lenl = B.length b - B.length b' in
-  Seq.lemma_split (B.as_seq h b) lenl;
-  Seq.slice (B.as_seq h b) 0 lenl
-
-let buffer_as_seq_subtract_ptr (h h': HS.mem) (#t: Type) (p: pointer (B.buffer t)) : Ghost (Seq.seq t)
-  (requires (
-    tail_ptr h h' p
-  ))
-  (ensures (fun y -> 
-    B.as_seq h (B.get h p 0) == Seq.append y (B.as_seq h' (B.get h' p 0))
-  ))
-= let b = B.get h p 0 in
-  let b' = B.get h' p 0 in
-  buffer_as_seq_subtract h' b b'
 
 let validator32_postcond
   (#k: parser_kind)
