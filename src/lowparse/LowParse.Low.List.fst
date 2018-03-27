@@ -115,3 +115,90 @@ let validate32_list
     then false
     else validate32_list' p v input len
   else false
+
+inline_for_extraction
+val list_is_nil
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (input: pointer buffer8)
+  (len: pointer U32.t)
+: HST.Stack bool
+  (requires (fun h ->
+    is_slice_ptr h input len /\
+    Some? (parse (parse_list p) (B.as_seq h (B.get h input 0)))
+  ))
+  (ensures (fun h res h' ->
+    h == h' /\ (
+    let Some (v, _) = parse (parse_list p) (B.as_seq h (B.get h input 0)) in
+    res == true <==> v == []
+  )))
+
+let list_is_nil #k #t p input len =
+  B.index len 0ul = 0ul
+
+inline_for_extraction
+val list_head
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (v: validator_nochk32 p)
+  (input: pointer buffer8)
+  (len: pointer U32.t)
+: HST.Stack unit
+  (requires (fun h ->
+    is_slice_ptr h input len /\ (
+    let ps = parse (parse_list p) (B.as_seq h (B.get h input 0)) in
+    Some? ps /\ (
+    let Some (v, _) = ps in
+    Cons? v
+  ))))
+  (ensures (fun h _ h' ->
+    B.modifies_2 input len h h' /\
+    is_slice_ptr h' input len /\ (
+    let Some ((v::_), _) = parse (parse_list p) (B.as_seq h (B.get h input 0)) in
+    let (Some (_, consumed)) = parse p (B.as_seq h (B.get h input 0)) in
+    let ps = parse p (B.as_seq h' (B.get h' input 0)) in
+    Some? ps /\ (
+    let Some (v', consumed') = ps in
+    v == v' /\
+    (consumed <: nat) == (consumed' <: nat) /\
+    U32.v (B.get h' len 0) == consumed /\
+    B.get h' input 0 == B.sub (B.get h input 0) 0ul (U32.uint_to_t consumed))
+  )))
+
+let list_head #k #t p v input len =
+  validate_nochk_truncate32 p v input len
+
+inline_for_extraction
+val list_tail
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (v: validator_nochk32 p)
+  (input: pointer buffer8)
+  (len: pointer U32.t)
+: HST.Stack unit
+  (requires (fun h ->
+    is_slice_ptr h input len /\ (
+    let ps = parse (parse_list p) (B.as_seq h (B.get h input 0)) in
+    Some? ps /\ (
+    let Some (v, _) = ps in
+    Cons? v
+  ))))
+  (ensures (fun h _ h' ->
+    B.modifies_2 input len h h' /\
+    is_slice_ptr h' input len /\ (
+    let Some ((_ :: v), _) = parse (parse_list p) (B.as_seq h (B.get h input 0)) in
+    let (Some (_, consumed)) = parse p (B.as_seq h (B.get h input 0)) in
+    let ps = parse (parse_list p) (B.as_seq h' (B.get h' input 0)) in
+    Some? ps /\ (
+    let Some (v', consumed') = ps in
+    v == v' /\
+    U32.v (B.get h' len 0) == consumed' /\
+    consumed + consumed' == U32.v (B.get h len 0) /\
+    B.get h' input 0 == B.sub (B.get h input 0) (U32.uint_to_t consumed) (U32.uint_to_t consumed')
+  ))))
+
+let list_tail #k #t p v input len =
+  v input len
