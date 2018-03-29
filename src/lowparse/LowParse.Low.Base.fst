@@ -5,6 +5,7 @@ module B = FStar.Buffer
 module U32 = FStar.UInt32
 module HS = FStar.HyperStack
 module HST = FStar.HyperStack.ST
+module S = LowParse.Slice
 
 type buffer8 = B.buffer FStar.UInt8.t
 
@@ -88,6 +89,47 @@ let validator32
   (ensures (fun h res h' ->
     validator32_postcond p input sz h res h'
   ))
+
+inline_for_extraction
+val validate
+  (#k: parser_kind)
+  (#t: Type0)
+  (#p: parser k t)
+  (v: validator32 p)
+  (s: S.bslice)
+: HST.Stack (option S.bslice)
+  (requires (fun h -> S.live h s))
+  (ensures (fun h res h' ->
+    B.modifies_0 h h' /\ (
+    let ps = parse p (S.as_seq h s) in
+    match res with
+    | None -> None? ps
+    | Some s' ->
+      Some? ps /\ (
+      let Some (_, consumed) = ps in
+      s' == S.advanced_slice s (U32.uint_to_t consumed)
+  ))))
+
+let validate #k #t #p v s =
+  HST.push_frame ();
+  let input : pointer buffer8 = B.create (S.as_buffer s) 1ul in
+  HST.push_frame ();
+  let sz : pointer U32.t = B.create (S.length s) 1ul in
+  let h1 = HST.get () in
+  let vl = v input sz in
+  let res =
+    if vl then
+      let input' = B.index input 0ul in
+      let sz' = B.index sz 0ul in
+      Some (S.of_buffer input' sz')
+    else
+      None
+  in
+  HST.pop_frame ();
+  HST.pop_frame ();
+  res
+
+#reset-options
 
 let parser32
   (#k: parser_kind)
