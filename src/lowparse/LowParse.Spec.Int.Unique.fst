@@ -9,16 +9,20 @@ open LowParse.Spec.Base
 let le_refl (x y: int) : Lemma (requires (x <= y /\ y <= x)) (ensures (x == y)) = ()
 
 let parse_u8_unique
+  (#err: Type0)
+  (e: err)
   (b: bytes)
 : Lemma
-  (parse Aux.parse_u8 b == parse I.parse_u8 b)
+  (parse (Aux.parse_u8 e) b == parse (I.parse_u8 e) b)
 = if Seq.length b < 1
-  then ()
+  then begin
+    I.parse_u8_spec_error e b
+  end
   else begin
-    I.parse_u8_spec b;
-    Aux.parse_u8_spec b;
-    let (Some (vI, consumedI)) = parse I.parse_u8 b in
-    let (Some (vAux, consumedAux)) = parse Aux.parse_u8 b in
+    I.parse_u8_spec e b;
+    Aux.parse_u8_spec e b;
+    let (Correct (vI, consumedI)) = parse (I.parse_u8 e) b in
+    let (Correct (vAux, consumedAux)) = parse (Aux.parse_u8 e) b in
     le_refl consumedI 1;
     le_refl consumedAux 1;
     ()
@@ -27,24 +31,30 @@ let parse_u8_unique
 module U8 = FStar.UInt8
 
 let serialize_u8_unique
+  (#err: Type0)
+  (e: err)
   (x: U8.t)
 : Lemma
-  (serialize Aux.serialize_u8 x == serialize I.serialize_u8 x)
-= Classical.forall_intro parse_u8_unique;
-  let s : serializer I.parse_u8 = serialize_ext Aux.parse_u8 Aux.serialize_u8 I.parse_u8 in
-  serializer_unique I.parse_u8 I.serialize_u8 s x
+  (serialize (Aux.serialize_u8 e) x == serialize (I.serialize_u8 e) x)
+= Classical.forall_intro (parse_u8_unique e);
+  let s : serializer (I.parse_u8 e) = serialize_ext (Aux.parse_u8 e) (Aux.serialize_u8 e) (I.parse_u8 e) in
+  serializer_unique (I.parse_u8 e) (I.serialize_u8 e) s x
 
 let parse_u16_unique
+  (#err: Type0)
+  (e: err)
   (b: bytes)
 : Lemma
-  (parse Aux.parse_u16 b == parse I.parse_u16 b)
+  (parse (Aux.parse_u16 e) b == parse (I.parse_u16 e) b)
 = if Seq.length b < 2
-  then ()
+  then begin
+    I.parse_u16_spec_error e b
+  end
   else begin
-    I.parse_u16_spec b;
-    Aux.parse_u16_spec b;
-    let (Some (vI, consumedI)) = parse I.parse_u16 b in
-    let (Some (vAux, consumedAux)) = parse Aux.parse_u16 b in
+    I.parse_u16_spec e b;
+    Aux.parse_u16_spec e b;
+    let (Correct (vI, consumedI)) = parse (I.parse_u16 e) b in
+    let (Correct (vAux, consumedAux)) = parse (Aux.parse_u16 e) b in
     le_refl consumedI 2;
     le_refl consumedAux 2;
     ()
@@ -53,24 +63,30 @@ let parse_u16_unique
 module U16 = FStar.UInt16
 
 let serialize_u16_unique
+  (#err: Type0)
+  (e: err)
   (x: U16.t)
 : Lemma
-  (serialize #_ #_ #Aux.parse_u16 Aux.serialize_u16 x == serialize I.serialize_u16 x)
-= Classical.forall_intro parse_u16_unique;
-  let s : serializer I.parse_u16 = serialize_ext Aux.parse_u16 Aux.serialize_u16 I.parse_u16 in
-  serializer_unique I.parse_u16 I.serialize_u16 s x
+  (serialize (Aux.serialize_u16 e) x == serialize (I.serialize_u16 e) x)
+= Classical.forall_intro (parse_u16_unique e);
+  let s : serializer (I.parse_u16 e) = serialize_ext (Aux.parse_u16 e) (Aux.serialize_u16 e) (I.parse_u16 e) in
+  serializer_unique (I.parse_u16 e) (I.serialize_u16 e) s x
 
 let parse_u32_unique
+  (#err: Type0)
+  (e: err)
   (b: bytes)
 : Lemma
-  (parse Aux.parse_u32 b == parse I.parse_u32 b)
+  (parse (Aux.parse_u32 e) b == parse (I.parse_u32 e) b)
 = if Seq.length b < 4
-  then ()
+  then begin
+    I.parse_u32_spec_error e b
+  end
   else begin
-    I.parse_u32_spec b;
-    Aux.parse_u32_spec b;
-    let (Some (vI, consumedI)) = parse I.parse_u32 b in
-    let (Some (vAux, consumedAux)) = parse Aux.parse_u32 b in
+    I.parse_u32_spec e b;
+    Aux.parse_u32_spec e b;
+    let (Correct (vI, consumedI)) = parse (I.parse_u32 e) b in
+    let (Correct (vAux, consumedAux)) = parse (Aux.parse_u32 e) b in
     le_refl consumedI 4;
     le_refl consumedAux 4;
     ()
@@ -79,9 +95,11 @@ let parse_u32_unique
 module U32 = FStar.UInt32
 
 let serialize_u32_unique
+  (#err: Type0)
+  (e: err)
   (x: U32.t)
 : Lemma
-  (serialize #_ #_ #Aux.parse_u32 Aux.serialize_u32 x == serialize I.serialize_u32 x)
-= Classical.forall_intro parse_u32_unique;
-  let s : serializer I.parse_u32 = serialize_ext Aux.parse_u32 Aux.serialize_u32 I.parse_u32 in
-  serializer_unique I.parse_u32 I.serialize_u32 s x
+  (serialize (Aux.serialize_u32 e) x == serialize (I.serialize_u32 e) x)
+= Classical.forall_intro (parse_u32_unique e);
+  let s : serializer (I.parse_u32 e) = serialize_ext (Aux.parse_u32 e) (Aux.serialize_u32 e) (I.parse_u32 e) in
+  serializer_unique (I.parse_u32 e) (I.serialize_u32 e) s x

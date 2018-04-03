@@ -20,14 +20,15 @@ let synth_tagged_union_data
 val parse_tagged_union
   (#kt: parser_kind)
   (#tag_t: Type0)
-  (pt: parser kt tag_t)
+  (#err: Type0)
+  (pt: parser kt tag_t err)
   (#data_t: Type0)
   (tag_of_data: (data_t -> GTot tag_t))
   (#k: parser_kind)
-  (p: (t: tag_t) -> Tot (parser k (refine_with_tag tag_of_data t)))
-: Tot (parser (and_then_kind kt k) data_t)
+  (p: (t: tag_t) -> Tot (parser k (refine_with_tag tag_of_data t) err))
+: Tot (parser (and_then_kind kt k) data_t err)
 
-let parse_tagged_union #kt #tag_t pt #data_t tag_of_data #k p =
+let parse_tagged_union #kt #tag_t #err pt #data_t tag_of_data #k p =
   pt `and_then` (fun (tg: tag_t) ->
     parse_synth #k #(refine_with_tag tag_of_data tg) (p tg) (synth_tagged_union_data tag_of_data tg)
   )
@@ -35,12 +36,13 @@ let parse_tagged_union #kt #tag_t pt #data_t tag_of_data #k p =
 let bare_serialize_tagged_union
   (#kt: parser_kind)
   (#tag_t: Type0)
-  (#pt: parser kt tag_t)
+  (#err: Type0)
+  (#pt: parser kt tag_t err)
   (st: serializer pt)
   (#data_t: Type0)
   (tag_of_data: (data_t -> GTot tag_t))
   (#k: parser_kind)
-  (#p: (t: tag_t) -> Tot (parser k (refine_with_tag tag_of_data t)))
+  (#p: (t: tag_t) -> Tot (parser k (refine_with_tag tag_of_data t) err))
   (s: (t: tag_t) -> Tot (serializer (p t)))
 : Tot (bare_serializer data_t)
 = fun (d: data_t) ->
@@ -52,12 +54,13 @@ let bare_serialize_tagged_union
 let bare_serialize_tagged_union_correct
   (#kt: parser_kind)
   (#tag_t: Type0)
-  (#pt: parser kt tag_t)
+  (#err: Type0)
+  (#pt: parser kt tag_t err)
   (st: serializer pt)
   (#data_t: Type0)
   (tag_of_data: (data_t -> GTot tag_t))
   (#k: parser_kind)
-  (#p: (t: tag_t) -> Tot (parser k (refine_with_tag tag_of_data t)))
+  (#p: (t: tag_t) -> Tot (parser k (refine_with_tag tag_of_data t) err))
   (s: (t: tag_t) -> Tot (serializer (p t)))
 : Lemma
   (requires (kt.parser_kind_subkind == Some ParserStrong))
@@ -65,25 +68,25 @@ let bare_serialize_tagged_union_correct
 = (* same proof as nondep_then *)
   let prf
     (x: data_t)
-  : Lemma (parse (parse_tagged_union pt tag_of_data p) (bare_serialize_tagged_union st tag_of_data s x) == Some (x, Seq.length (bare_serialize_tagged_union  st tag_of_data s x)))
+  : Lemma (parse (parse_tagged_union pt tag_of_data p) (bare_serialize_tagged_union st tag_of_data s x) == Correct (x, Seq.length (bare_serialize_tagged_union  st tag_of_data s x)))
   = let t = tag_of_data x in
     let (u: refine_with_tag tag_of_data t) = x in
     let v1' = parse pt (bare_serialize_tagged_union st tag_of_data s x) in
     let v1 = parse pt (st t) in
-    assert (Some? v1);
+    assert (Correct? v1);
     assert (no_lookahead_on pt (st t) (bare_serialize_tagged_union st tag_of_data s x));
-    let (Some (_, len')) = parse pt (st t) in
+    let (Correct (_, len')) = parse pt (st t) in
     assert (len' == Seq.length (st t));
     assert (len' <= Seq.length (bare_serialize_tagged_union st tag_of_data s x));
     assert (Seq.slice (st t) 0 len' == st t);
     seq_slice_append_l (st t) (serialize (s t) u);
     assert (no_lookahead_on_precond pt (st t) (bare_serialize_tagged_union st tag_of_data s x));
     assert (no_lookahead_on_postcond pt (st t) (bare_serialize_tagged_union st tag_of_data s x));
-    assert (Some? v1');
+    assert (Correct? v1');
     assert (injective_precond pt (st t) (bare_serialize_tagged_union st tag_of_data s x));
     assert (injective_postcond pt (st t) (bare_serialize_tagged_union st tag_of_data s x));
-    let (Some (x1, len1)) = v1 in
-    let (Some (x1', len1')) = v1' in
+    let (Correct (x1, len1)) = v1 in
+    let (Correct (x1', len1')) = v1' in
     assert (x1 == x1');
     assert ((len1 <: nat) == (len1' <: nat));
     assert (x1 == t);
@@ -99,12 +102,13 @@ let bare_serialize_tagged_union_correct
 let serialize_tagged_union
   (#kt: parser_kind)
   (#tag_t: Type0)
-  (#pt: parser kt tag_t)
+  (#err: Type0)
+  (#pt: parser kt tag_t err)
   (st: serializer pt)
   (#data_t: Type0)
   (tag_of_data: (data_t -> GTot tag_t))
   (#k: parser_kind)
-  (#p: (t: tag_t) -> Tot (parser k (refine_with_tag tag_of_data t)))
+  (#p: (t: tag_t) -> Tot (parser k (refine_with_tag tag_of_data t) err))
   (s: (t: tag_t) -> Tot (serializer (p t)))
 : Pure (serializer (parse_tagged_union pt tag_of_data p))
   (requires (kt.parser_kind_subkind == Some ParserStrong))
@@ -154,8 +158,9 @@ let sum_tag_of_data (t: sum) : Tot ((x: sum_type t) -> GTot (sum_key t)) =
   tag_of_data
 
 let weaken_parse_cases_kind
+  (#err: Type0)
   (s: sum)
-  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x)))
+  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x) err))
 : Tot parser_kind
 = let keys : list (sum_key_type s) = List.Tot.map fst (sum_enum s) in
   glb_list_of #(sum_key_type s) (fun (x: sum_key_type s) ->
@@ -165,32 +170,37 @@ let weaken_parse_cases_kind
   ) (List.Tot.map fst (sum_enum s))
 
 let parse_sum_cases
+  (#err: Type0)
   (s: sum)
-  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x)))
+  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x) err))
   (x: sum_key s)
-: Tot (parser _ (sum_cases s x))
+: Tot (parser _ (sum_cases s x) err)
 = let (| _, p |) = f x in
   weaken (weaken_parse_cases_kind s f) p
 
 let parse_sum
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (p: parser kt (sum_repr_type t))
+  (p: parser kt (sum_repr_type t) err)
+  (e_key_invalid: err)
   (#k: parser_kind)
-  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
-: Tot (parser (and_then_kind (parse_filter_kind kt) k) (sum_type t))
+  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
+: Tot (parser (and_then_kind (parse_filter_kind kt) k) (sum_type t) err)
 = parse_tagged_union
     #(parse_filter_kind kt)
     #(sum_key t)
-    (parse_enum_key p (sum_enum t))
+    #err
+    (parse_enum_key p (sum_enum t) e_key_invalid)
     #(sum_type t)
     (sum_tag_of_data t)
     #k
     pc
 
 let serialize_sum_cases
+  (#err: Type0)
   (s: sum)
-  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x)))
+  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x) err))
   (sr: (x: sum_key s) -> Tot (serializer (dsnd (f x))))
   (x: sum_key s)
 : Tot (serializer (parse_sum_cases s f x))
@@ -201,20 +211,23 @@ let serialize_sum_cases
 
 let serialize_sum
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (#p: parser kt (sum_repr_type t))
+  (#p: parser kt (sum_repr_type t) err)
   (s: serializer p)
+  (e_key_invalid: err)
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (sc: ((x: sum_key t) -> Tot (serializer (pc x))))
-: Pure (serializer (parse_sum t p pc))
+: Pure (serializer (parse_sum t p e_key_invalid pc))
   (requires (kt.parser_kind_subkind == Some ParserStrong))
   (ensures (fun _ -> True))
 = serialize_tagged_union
     #(parse_filter_kind kt)
     #(sum_key t)
-    #(parse_enum_key p (sum_enum t))
-    (serialize_enum_key p s (sum_enum t))
+    #err
+    #(parse_enum_key p (sum_enum t) e_key_invalid)
+    (serialize_enum_key p s (sum_enum t) e_key_invalid)
     #(sum_type t)
     (sum_tag_of_data t)
     #k
@@ -253,7 +266,7 @@ let synth_sum_with_nondep_case
   (nondep_part: Type0)
   (t: sum)
   (x: sum_key (make_sum_with_nondep nondep_part t))
-  (d: nondep_part * sum_cases t (x <: sum_key_type t))
+  (d: (nondep_part * sum_cases t (coerce (sum_key t) x)))
 : Tot (sum_cases (make_sum_with_nondep nondep_part t) x)
 = match d with
   | (df, ds) -> (df, (ds <: sum_type t))
@@ -262,25 +275,28 @@ let parse_sum_with_nondep_cases
   (#nondep_part: Type0)
   (t: sum)
   (#knd: parser_kind)
-  (pnd: parser knd nondep_part)
+  (#err: Type0)
+  (pnd: parser knd nondep_part err)
   (#k: parser_kind)
-  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (x: sum_key (make_sum_with_nondep nondep_part t))
-: Tot (parser _ (sum_cases (make_sum_with_nondep nondep_part t) x))
+: Tot (parser _ (sum_cases (make_sum_with_nondep nondep_part t) x) err)
 = let (x' : sum_key t) = (x <: sum_key_type t) in
   (pnd `nondep_then` (pc x')) `parse_synth` (synth_sum_with_nondep_case nondep_part t x)
 
 let parse_sum_with_nondep
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (p: parser kt (sum_repr_type t))
+  (p: parser kt (sum_repr_type t) err)
+  (e_key_invalid: err)
   (#knd: parser_kind)
   (#nondep_t: Type0)
-  (pnd: parser knd nondep_t)
+  (pnd: parser knd nondep_t err)
   (#k: parser_kind)
-  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
-: Tot (parser _ (sum_type (make_sum_with_nondep nondep_t t)))
-= parse_sum (make_sum_with_nondep nondep_t t) p (parse_sum_with_nondep_cases t pnd pc)
+  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
+: Tot (parser _ (sum_type (make_sum_with_nondep nondep_t t)) err)
+= parse_sum (make_sum_with_nondep nondep_t t) p e_key_invalid (parse_sum_with_nondep_cases t pnd pc)
 
 (* Sum with default case *)
 
@@ -345,10 +361,11 @@ let synth_dsum_unknown
 let parse_dsum_cases
   (d: dsum)
   (#k: parser_kind)
-  (pk: ((kt: sum_key (sum_of_dsum d)) -> Tot (parser k (sum_cases (sum_of_dsum d) kt))))
-  (pu: parser k (dsum_unknown_type d))
+  (#err: Type0)
+  (pk: ((kt: sum_key (sum_of_dsum d)) -> Tot (parser k (sum_cases (sum_of_dsum d) kt) err)))
+  (pu: parser k (dsum_unknown_type d) err)
   (t: dsum_key d)
-: Tot (parser k (refine_with_tag (dsum_tag_of_data d) t))
+: Tot (parser k (refine_with_tag (dsum_tag_of_data d) t) err)
 = match t with
   | Known kt ->
     parse_synth (pk kt) (synth_dsum_known d kt)
@@ -358,14 +375,16 @@ let parse_dsum_cases
 let parse_dsum
   (d: dsum)
   (#tk: parser_kind)
-  (tp: parser tk (sum_repr_type (sum_of_dsum d)))
+  (#err: Type0)
+  (tp: parser tk (sum_repr_type (sum_of_dsum d)) err)
   (#k: parser_kind)
-  (pk: ((kt: sum_key (sum_of_dsum d)) -> Tot (parser k (sum_cases (sum_of_dsum d) kt))))
-  (pu: parser k (dsum_unknown_type d))
-: Tot (parser (and_then_kind tk k) (dsum_type d))
+  (pk: ((kt: sum_key (sum_of_dsum d)) -> Tot (parser k (sum_cases (sum_of_dsum d) kt) err)))
+  (pu: parser k (dsum_unknown_type d) err)
+: Tot (parser (and_then_kind tk k) (dsum_type d) err)
 = parse_tagged_union
     #tk
     #(dsum_key d)
+    #err
     (parse_maybe_enum_key tp (sum_enum (sum_of_dsum d)))
     #(dsum_type d)
     (dsum_tag_of_data d)
@@ -391,9 +410,10 @@ let synth_dsum_unknown_recip
 let serialize_dsum_cases
   (d: dsum)
   (#k: parser_kind)
-  (#pk: ((kt: sum_key (sum_of_dsum d)) -> Tot (parser k (sum_cases (sum_of_dsum d) kt))))
+  (#err: Type0)
+  (#pk: ((kt: sum_key (sum_of_dsum d)) -> Tot (parser k (sum_cases (sum_of_dsum d) kt) err)))
   (sk: ((kt: sum_key (sum_of_dsum d)) -> Tot (serializer (pk kt))))
-  (#pu: parser k (dsum_unknown_type d))
+  (#pu: parser k (dsum_unknown_type d) err)
   (su: serializer pu)
   (t: dsum_key d)
 : Tot (serializer (parse_dsum_cases d pk pu t))
@@ -416,12 +436,13 @@ let serialize_dsum_cases
 let serialize_dsum
   (d: dsum)
   (#tk: parser_kind)
-  (#tp: parser tk (sum_repr_type (sum_of_dsum d)))
+  (#err: Type0)
+  (#tp: parser tk (sum_repr_type (sum_of_dsum d)) err)
   (ts: serializer tp)
   (#k: parser_kind)
-  (#pk: ((kt: sum_key (sum_of_dsum d)) -> Tot (parser k (sum_cases (sum_of_dsum d) kt))))
+  (#pk: ((kt: sum_key (sum_of_dsum d)) -> Tot (parser k (sum_cases (sum_of_dsum d) kt) err)))
   (sk: ((kt: sum_key (sum_of_dsum d)) -> Tot (serializer (pk kt))))
-  (#pu: parser k (dsum_unknown_type d))
+  (#pu: parser k (dsum_unknown_type d) err)
   (su: serializer pu)
 : Pure (serializer (parse_dsum d tp pk pu))
   (requires (tk.parser_kind_subkind == Some ParserStrong))
@@ -429,6 +450,7 @@ let serialize_dsum
 = serialize_tagged_union
     #tk
     #(dsum_key d)
+    #err
     #(parse_maybe_enum_key tp (sum_enum (sum_of_dsum d)))
     (serialize_maybe_enum_key _ ts (sum_enum (sum_of_dsum d)))
     #(dsum_type d)

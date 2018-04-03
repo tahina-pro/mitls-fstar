@@ -149,12 +149,14 @@ let enum_key_of_repr
 let parse_enum_key
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (e: enum key repr)
-: Tot (parser (parse_filter_kind k) (enum_key e))
-= (p
-    `parse_filter`
+  (e_key_invalid: err)
+: Tot (parser (parse_filter_kind k) (enum_key e) err)
+= (parse_filter p
     (fun (r: repr) -> list_mem r (list_map snd e))
+    e_key_invalid
   )
   `parse_synth`
   (fun (x: repr {list_mem x (list_map snd e) == true})  -> enum_key_of_repr e x)
@@ -192,7 +194,8 @@ let enum_key_of_repr_of_key
 let bare_serialize_enum_key
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (s: serializer p)
   (e: enum key repr)
 : Tot (bare_serializer (enum_key e))
@@ -203,11 +206,13 @@ let bare_serialize_enum_key
 let bare_serialize_enum_key_correct
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (s: serializer p)
   (e: enum key repr)
+  (e_key_invalid: err)
 : Lemma
-  (serializer_correct (parse_enum_key p e) (bare_serialize_enum_key p s e))
+  (serializer_correct (parse_enum_key p e e_key_invalid) (bare_serialize_enum_key p s e))
 = Classical.forall_intro (enum_key_of_repr_of_key e)
 
 #reset-options
@@ -215,11 +220,13 @@ let bare_serialize_enum_key_correct
 let serialize_enum_key
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (s: serializer p)
   (e: enum key repr)
-: Tot (serializer (parse_enum_key p e))
-= bare_serialize_enum_key_correct p s e;
+  (e_key_invalid: err)
+: Tot (serializer (parse_enum_key p e e_key_invalid))
+= bare_serialize_enum_key_correct p s e e_key_invalid;
   bare_serialize_enum_key p s e
 
 inline_for_extraction
@@ -242,9 +249,10 @@ let maybe_enum_key_of_repr
 let parse_maybe_enum_key
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (e: enum key repr)
-: Tot (parser k (maybe_enum_key e))
+: Tot (parser k (maybe_enum_key e) err)
 = p `parse_synth` (maybe_enum_key_of_repr e)
 
 let repr_of_maybe_enum_key
@@ -261,7 +269,8 @@ let repr_of_maybe_enum_key
 let serialize_maybe_enum_key
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (s: serializer p)
   (e: enum key repr)
 : Tot (serializer (parse_maybe_enum_key p e))
@@ -286,10 +295,12 @@ let parse_total_enum_key
   (#k: parser_kind)
   (#key: eqtype)
   (#repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (l: total_enum key repr)
-: Tot (parser (parse_filter_kind k) key)
-= parse_enum_key p l `parse_synth` (synth_total_enum_key l)
+  (e_key_invalid: err)
+: Tot (parser (parse_filter_kind k) key err)
+= parse_enum_key p l e_key_invalid `parse_synth` (synth_total_enum_key l)
 
 let synth_total_enum_key_recip
   (#key: eqtype)
@@ -303,11 +314,13 @@ let serialize_total_enum_key
   (#k: parser_kind)
   (#key: eqtype)
   (#repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (s: serializer p)
   (l: total_enum key repr)
-: Tot (serializer (parse_total_enum_key p l))
-= serialize_synth (parse_enum_key p l) (synth_total_enum_key l) (serialize_enum_key p s l) (synth_total_enum_key_recip l) ()
+  (e_key_invalid: err)
+: Tot (serializer (parse_total_enum_key p l e_key_invalid))
+= serialize_synth (parse_enum_key p l e_key_invalid) (synth_total_enum_key l) (serialize_enum_key p s l e_key_invalid) (synth_total_enum_key_recip l) ()
 
 type maybe_total_enum_key (#key #repr: eqtype) (e: total_enum key repr) =
 | TotalKnown of key
@@ -325,9 +338,10 @@ let maybe_total_enum_key_of_repr
 let parse_maybe_total_enum_key
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (e: total_enum key repr)
-: Tot (parser k (maybe_total_enum_key e))
+: Tot (parser k (maybe_total_enum_key e) err)
 = p `parse_synth` (maybe_total_enum_key_of_repr e)
 
 let repr_of_maybe_total_enum_key
@@ -344,7 +358,8 @@ let repr_of_maybe_total_enum_key
 let serialize_maybe_total_enum_key
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (s: serializer p)
   (e: total_enum key repr)
 : Tot (serializer (parse_maybe_total_enum_key p e))

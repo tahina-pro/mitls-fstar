@@ -23,9 +23,11 @@ let parse_flbytes_gen
   B32.hide s
 
 let parse_flbytes
+  (#err: Type0)
   (sz: nat { sz < 4294967296 } )
-: Tot (parser (total_constant_size_parser_kind sz) (B32.lbytes sz))
-= make_total_constant_size_parser sz (B32.lbytes sz) (parse_flbytes_gen sz)
+  (e: err)
+: Tot (parser (total_constant_size_parser_kind sz) (B32.lbytes sz) err)
+= make_total_constant_size_parser sz (B32.lbytes sz) _ (parse_flbytes_gen sz) e
 
 let serialize_flbytes'
   (sz: nat { sz < 4294967296 } )
@@ -36,25 +38,29 @@ let serialize_flbytes'
   )
 
 let serialize_flbytes_correct
+  (#err: Type0)
   (sz: nat { sz < 4294967296 } )
+  (e: err)
 : Lemma
-  (serializer_correct (parse_flbytes sz) (serialize_flbytes' sz))
+  (serializer_correct (parse_flbytes sz e) (serialize_flbytes' sz))
 = let prf
     (input: B32.lbytes sz)
   : Lemma
     (
       let ser = serialize_flbytes' sz input in
       Seq.length ser == sz /\
-      parse (parse_flbytes sz) ser == Some (input, sz)
+      parse (parse_flbytes sz e) ser == Correct (input, sz)
     )
   = ()
   in
   Classical.forall_intro prf
 
 let serialize_flbytes
+  (#err: Type0)
   (sz: nat { sz < 4294967296 } )
-: Tot (serializer (parse_flbytes sz))
-= serialize_flbytes_correct sz;
+  (e: err)
+: Tot (serializer (parse_flbytes sz e))
+= serialize_flbytes_correct sz e;
   serialize_flbytes' sz
 
 (* VLBytes *)
@@ -64,6 +70,7 @@ reading the length header, "parsing" the payload will always succeed,
 by just returning it unchanged (unless the length of the input
 is greater than 2^32) *)
 
+inline_for_extraction
 let parse_all_bytes_kind =
   {
     parser_kind_low = 0;
@@ -75,25 +82,30 @@ let parse_all_bytes_kind =
   }
 
 let parse_all_bytes'
+  (#err: Type0)
+  (e: err)
   (input: bytes)
-: GTot (option (B32.bytes * consumed_length input))
+: GTot (result (B32.bytes * consumed_length input) err)
 = let len = Seq.length input in
   if len >= 4294967296
-  then None
+  then Error e
   else begin
     lt_pow2_32 len;
-    Some (B32.hide input, len)
+    Correct (B32.hide input, len)
   end
 
 #set-options "--z3rlimit 16"
 
-let parse_all_bytes_injective () : Lemma
-  (injective parse_all_bytes')
+let parse_all_bytes_injective
+  (#err: Type0)
+  (e: err)
+: Lemma
+  (injective (parse_all_bytes' e))
 = let prf
     (b1 b2: bytes)
   : Lemma
-    (requires (injective_precond parse_all_bytes' b1 b2))
-    (ensures (injective_postcond parse_all_bytes' b1 b2))
+    (requires (injective_precond (parse_all_bytes' e) b1 b2))
+    (ensures (injective_postcond (parse_all_bytes' e) b1 b2))
   = assert (Seq.length b1 < 4294967296);
     assert (Seq.length b2 < 4294967296);
     lt_pow2_32 (Seq.length b1);
@@ -105,14 +117,20 @@ let parse_all_bytes_injective () : Lemma
 
 #reset-options
 
-let parse_all_bytes_correct () : Lemma
-  (parser_kind_prop parse_all_bytes_kind parse_all_bytes')
-= parse_all_bytes_injective ();
-  injective_consumes_all_no_lookahead_weak parse_all_bytes'
+let parse_all_bytes_correct
+  (#err: Type0)
+  (e: err)
+: Lemma
+  (parser_kind_prop parse_all_bytes_kind (parse_all_bytes' e))
+= parse_all_bytes_injective e;
+  injective_consumes_all_no_lookahead_weak (parse_all_bytes' e)
 
-let parse_all_bytes : parser parse_all_bytes_kind B32.bytes =
-  parse_all_bytes_correct ();
-  parse_all_bytes'
+let parse_all_bytes
+  (#err: Type0)
+  (e: err)
+: Tot (parser parse_all_bytes_kind B32.bytes err) =
+  parse_all_bytes_correct e;
+  parse_all_bytes' e
 
 let serialize_all_bytes'
   (input: B32.bytes)
@@ -121,14 +139,17 @@ let serialize_all_bytes'
 
 #set-options "--z3rlimit 32"
 
-let serialize_all_bytes_correct () : Lemma (serializer_correct parse_all_bytes serialize_all_bytes') =
+let serialize_all_bytes_correct
+  (#err: Type0)
+  (e: err)
+: Lemma (serializer_correct (parse_all_bytes e) serialize_all_bytes') =
   let prf
     (input: B32.bytes)
   : Lemma
     (
       let ser = serialize_all_bytes' input in
       let len : consumed_length ser = Seq.length ser in
-      parse parse_all_bytes ser == Some (input, len)
+      parse (parse_all_bytes e) ser == Correct (input, len)
     )
   = assert (Seq.length (serialize_all_bytes' input) == B32.length input);
     lt_pow2_32 (B32.length input);
@@ -138,15 +159,20 @@ let serialize_all_bytes_correct () : Lemma (serializer_correct parse_all_bytes s
 
 #reset-options
 
-let serialize_all_bytes : serializer parse_all_bytes =
-  serialize_all_bytes_correct ();
+let serialize_all_bytes
+  (#err: Type0)
+  (e: err)
+: Tot (serializer (parse_all_bytes e)) =
+  serialize_all_bytes_correct e;
   serialize_all_bytes'
 
 let parse_bounded_vlbytes'
+  (#err: Type0)
   (min: nat)
   (max: nat { min <= max /\ max > 0 /\ max < 4294967296 })
-: Tot (parser (parse_bounded_vldata_kind min max) (parse_bounded_vldata_strong_t min max #_ #_ #parse_all_bytes serialize_all_bytes))
-= parse_bounded_vldata_strong min max serialize_all_bytes
+  (e_size_incomplete e_size_invalid: err)
+: Tot (parser (parse_bounded_vldata_kind min max) (parse_bounded_vldata_strong_t min max (serialize_all_bytes e_size_invalid)) err)
+= parse_bounded_vldata_strong min max (serialize_all_bytes e_size_invalid) e_size_incomplete e_size_invalid e_size_invalid
 
 let parse_bounded_vlbytes_pred
   (min: nat)
@@ -163,33 +189,41 @@ let parse_bounded_vlbytes_t
 = (x: B32.bytes { parse_bounded_vlbytes_pred min max x } )
 
 let synth_bounded_vlbytes
+  (#err: Type0)
   (min: nat)
   (max: nat { min <= max /\ max > 0 /\ max < 4294967296 })
-  (x: parse_bounded_vldata_strong_t min max #_ #_ #parse_all_bytes serialize_all_bytes)
+  (e: err)
+  (x: parse_bounded_vldata_strong_t min max (serialize_all_bytes e))
 : Tot (parse_bounded_vlbytes_t min max)
 = x
 
 let parse_bounded_vlbytes
+  (#err: Type0)
   (min: nat)
   (max: nat { min <= max /\ max > 0 /\ max < 4294967296 } )
-: Tot (parser (parse_bounded_vldata_kind min max) (parse_bounded_vlbytes_t min max))
-= parse_synth (parse_bounded_vlbytes' min max) (synth_bounded_vlbytes min max)
+  (e_size_incomplete e_size_invalid: err)
+: Tot (parser (parse_bounded_vldata_kind min max) (parse_bounded_vlbytes_t min max) err)
+= parse_synth (parse_bounded_vlbytes' min max e_size_incomplete e_size_invalid) (synth_bounded_vlbytes min max e_size_invalid)
 
 let serialize_bounded_vlbytes'
+  (#err: Type0)
   (min: nat)
   (max: nat { min <= max /\ max > 0 /\ max < 4294967296 } )
-: Tot (serializer (parse_bounded_vlbytes' min max))
-= serialize_bounded_vldata_strong min max serialize_all_bytes
+  (e_size_incomplete e_size_invalid: err)
+: Tot (serializer (parse_bounded_vlbytes' min max e_size_incomplete e_size_invalid))
+= serialize_bounded_vldata_strong min max (serialize_all_bytes e_size_invalid) e_size_incomplete e_size_invalid e_size_invalid
 
 let serialize_bounded_vlbytes
+  (#err: Type0)
   (min: nat)
   (max: nat { min <= max /\ max > 0 /\ max < 4294967296 } )
-: Tot (serializer (parse_bounded_vlbytes min max))
+  (e_size_incomplete e_size_invalid: err)
+: Tot (serializer (parse_bounded_vlbytes min max e_size_incomplete e_size_invalid))
 = serialize_synth
-    (parse_bounded_vlbytes' min max)
-    (synth_bounded_vlbytes min max)
-    (serialize_bounded_vlbytes' min max)
+    (parse_bounded_vlbytes' min max e_size_incomplete e_size_invalid)
+    (synth_bounded_vlbytes min max e_size_invalid)
+    (serialize_bounded_vlbytes' min max e_size_incomplete e_size_invalid)
     (fun (x: parse_bounded_vlbytes_t min max) ->
-      (x <: parse_bounded_vldata_strong_t min max #_ #_ #parse_all_bytes serialize_all_bytes)
+      (x <: parse_bounded_vldata_strong_t min max (serialize_all_bytes e_size_invalid))
     )
     ()
