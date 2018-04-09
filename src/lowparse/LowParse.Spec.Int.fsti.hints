@@ -1,5 +1,5 @@
 [
-  "\u0001ë#­<œÿ–š-ÁüÓ±œ\u0019",
+  "Ø[P\u00063`}\tdE’ª\u0005ë\u001f",
   [
     [
       "LowParse.Spec.Int.parse_u8_spec",
@@ -8,7 +8,7 @@
       1,
       [
         "@MaxIFuel_assumption", "@query", "b2t_def", "bool_inversion",
-        "disc_equation_FStar.Pervasives.Native.Some",
+        "disc_equation_LowParse.Spec.Base.Correct",
         "equation_FStar.UInt8.byte", "equation_LowParse.Bytes.byte",
         "equation_Prims.squash", "function_token_typing_FStar.UInt8.t",
         "kinding_FStar.Pervasives.Native.tuple2@tok",
@@ -16,11 +16,11 @@
         "primitive_Prims.op_LessThanOrEqual",
         "projection_inverse_BoxBool_proj_0",
         "refinement_interpretation_Prims_Tm_refine_8d65e998a07dd53ec478e27017d9dba5",
-        "typing_FStar.Pervasives.Native.uu___is_Some",
-        "typing_LowParse.Spec.Base.consumed_length"
+        "typing_LowParse.Spec.Base.consumed_length",
+        "typing_LowParse.Spec.Base.uu___is_Correct"
       ],
       0,
-      "dbe6fa55b2c57c4066fe0660415bc0c1"
+      "b9901582613c3ca2c9a42febc079057b"
     ],
     [
       "LowParse.Spec.Int.parse_u16_spec",
@@ -29,7 +29,7 @@
       1,
       [
         "@MaxIFuel_assumption", "@query", "b2t_def", "bool_inversion",
-        "disc_equation_FStar.Pervasives.Native.Some",
+        "disc_equation_LowParse.Spec.Base.Correct",
         "equation_FStar.UInt8.byte", "equation_LowParse.Bytes.byte",
         "equation_Prims.squash", "function_token_typing_FStar.UInt16.t",
         "kinding_FStar.Pervasives.Native.tuple2@tok",
@@ -37,11 +37,11 @@
         "primitive_Prims.op_LessThanOrEqual",
         "projection_inverse_BoxBool_proj_0",
         "refinement_interpretation_Prims_Tm_refine_8d65e998a07dd53ec478e27017d9dba5",
-        "typing_FStar.Pervasives.Native.uu___is_Some",
-        "typing_LowParse.Spec.Base.consumed_length"
+        "typing_LowParse.Spec.Base.consumed_length",
+        "typing_LowParse.Spec.Base.uu___is_Correct"
       ],
       0,
-      "e9ce344f76a82b09aac67d232ae2c8b6"
+      "47fb8e189bc996a12a60cb254e816cbb"
     ],
     [
       "LowParse.Spec.Int.parse_u32_spec",
@@ -50,7 +50,7 @@
       1,
       [
         "@MaxIFuel_assumption", "@query", "b2t_def", "bool_inversion",
-        "disc_equation_FStar.Pervasives.Native.Some",
+        "disc_equation_LowParse.Spec.Base.Correct",
         "equation_FStar.UInt8.byte", "equation_LowParse.Bytes.byte",
         "equation_Prims.squash", "function_token_typing_FStar.UInt32.t",
         "kinding_FStar.Pervasives.Native.tuple2@tok",
@@ -58,11 +58,11 @@
         "primitive_Prims.op_LessThanOrEqual",
         "projection_inverse_BoxBool_proj_0",
         "refinement_interpretation_Prims_Tm_refine_8d65e998a07dd53ec478e27017d9dba5",
-        "typing_FStar.Pervasives.Native.uu___is_Some",
-        "typing_LowParse.Spec.Base.consumed_length"
+        "typing_LowParse.Spec.Base.consumed_length",
+        "typing_LowParse.Spec.Base.uu___is_Correct"
       ],
       0,
-      "05d0e04fbcbd218f691af15b637e26ea"
+      "e3679b7ecd4a5ef2a3d08b6257cae197"
     ]
   ]
 ]

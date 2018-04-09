@@ -127,26 +127,26 @@ let serialize_seq'
   (#k: parser_kind)
   (#t: Type0)
   (#err: Type0)
-  (p: parser k t err)
-  (u: unit { k.parser_kind_low > 0 } )
+  (#p: parser k t err)
   (s: serializer p)
+  (u: unit { k.parser_kind_low > 0 } )
 : Pure (serializer (parse_seq' p u))
   (requires (PL.serialize_list_precond k))
   (ensures (fun _ -> True))
 = Classical.forall_intro (Seq.lemma_seq_list_bij #t);
   Classical.forall_intro (Seq.lemma_list_seq_bij #t);
-  serialize_synth (PL.parse_list p u) Seq.seq_of_list (PL.serialize_list p u s) Seq.seq_to_list ()
+  serialize_synth (PL.parse_list p u) Seq.seq_of_list (PL.serialize_list s u) Seq.seq_to_list ()
 
 let serialize_seq
   (#k: parser_kind)
   (#t: Type0)
   (#err: Type0)
-  (p: parser k t err)
-  (u: unit { k.parser_kind_low > 0 } )
+  (#p: parser k t err)
   (s: serializer p)
+  (u: unit { k.parser_kind_low > 0 } )
 : Pure (serializer (parse_seq p u))
   (requires (PL.serialize_list_precond k))
   (ensures (fun _ -> True))
 = Classical.forall_intro (parse_seq_correct p u);
-  serialize_ext (parse_seq' p u) (serialize_seq' p u s) (parse_seq p u)
+  serialize_ext (parse_seq' p u) (serialize_seq' s u) (parse_seq p u)
 

@@ -219,9 +219,9 @@ let serialize_list
   (#k: parser_kind)
   (#t: Type0)
   (#err: Type0)
-  (p: parser k t err)
-  (u: unit { k.parser_kind_low > 0 } )
+  (#p: parser k t err)
   (s: serializer p)
+  (u: unit { k.parser_kind_low > 0 } )
 : Pure (serializer (parse_list p u))
   (requires (
     serialize_list_precond k
@@ -234,23 +234,23 @@ let serialize_list_nil
   (#k: parser_kind)
   (#t: Type0)
   (#err: Type0)
-  (p: parser k t err)
-  (u: unit { k.parser_kind_low > 0 } )
+  (#p: parser k t err)
   (s: serializer p)
+  (u: unit { k.parser_kind_low > 0 } )
 : Lemma
   (requires (
     serialize_list_precond k
   ))
-  (ensures (serialize (serialize_list p u s) [] == Seq.createEmpty))
+  (ensures (serialize (serialize_list s u) [] == Seq.createEmpty))
 = ()
 
 let serialize_list_cons
   (#k: parser_kind)
   (#t: Type0)
   (#err: Type0)
-  (p: parser k t err)
-  (u: unit { k.parser_kind_low > 0 } )
+  (#p: parser k t err)
   (s: serializer p)
+  (u: unit { k.parser_kind_low > 0 } )
   (a: t)
   (q: list t)
 : Lemma
@@ -258,7 +258,7 @@ let serialize_list_cons
     serialize_list_precond k
   ))
   (ensures (
-    serialize (serialize_list p u s) (a :: q) == Seq.append (serialize s a) (serialize (serialize_list p u s) q)
+    serialize (serialize_list s u) (a :: q) == Seq.append (serialize s a) (serialize (serialize_list s u) q)
   ))
 = ()
 
@@ -266,32 +266,32 @@ let serialize_list_singleton
   (#k: parser_kind)
   (#t: Type0)
   (#err: Type0)
-  (p: parser k t err)
-  (u: unit { k.parser_kind_low > 0 } )
+  (#p: parser k t err)
   (s: serializer p)
+  (u: unit { k.parser_kind_low > 0 } )
   (a: t)
 : Lemma
   (requires (serialize_list_precond k))
-  (ensures (serialize (serialize_list p u s) [a] == serialize s a))
+  (ensures (serialize (serialize_list s u) [a] == serialize s a))
 = Seq.append_empty_r (serialize s a)
 
 let rec serialize_list_append
   (#k: parser_kind)
   (#t: Type0)
   (#err: Type0)
-  (p: parser k t err)
-  (u: unit { k.parser_kind_low > 0 } )
+  (#p: parser k t err)
   (s: serializer p)
+  (u: unit { k.parser_kind_low > 0 } )
   (l1 l2: list t)
 : Lemma
   (requires (serialize_list_precond k))
-  (ensures (serialize (serialize_list p u s) (L.append l1 l2) == Seq.append (serialize (serialize_list p u s) l1) (serialize (serialize_list p u s) l2)))
+  (ensures (serialize (serialize_list s u) (L.append l1 l2) == Seq.append (serialize (serialize_list s u) l1) (serialize (serialize_list s u) l2)))
 = match l1 with
   | a :: q ->
-    serialize_list_append p u s q l2;
-    Seq.append_assoc (serialize s a) (serialize (serialize_list p u s) q) (serialize (serialize_list p u s) l2)
+    serialize_list_append s u q l2;
+    Seq.append_assoc (serialize s a) (serialize (serialize_list s u) q) (serialize (serialize_list s u) l2)
   | [] ->
-    Seq.append_empty_l (serialize (serialize_list p u s) l2)
+    Seq.append_empty_l (serialize (serialize_list s u) l2)
 
 val list_length_constant_size_parser_correct
   (#k: parser_kind)

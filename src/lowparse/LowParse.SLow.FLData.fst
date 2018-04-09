@@ -9,54 +9,60 @@ inline_for_extraction
 let parse32_fldata
   (#k: parser_kind)
   (#t: Type0)
-  (#p: parser k t)
+  (#err: Type0)
+  (#p: parser k t err)
   (p32: parser32 p)
   (sz: nat)
   (sz32: U32.t { U32.v sz32 == sz } )
-: Tot (parser32 (parse_fldata p sz))
+  (e: err)
+: Tot (parser32 (parse_fldata p sz e))
 = (fun (input: bytes32) -> ((
     if U32.lt (B32.len input) sz32
     then
-      None
+      Error e
     else
       match p32 (B32.b32slice input 0ul sz32) with
-      | Some (v, consumed) ->
+      | Correct (v, consumed) ->
 	if consumed = sz32
 	then begin
-	  Some (v, consumed)
-	end else None
-      | None -> None
-  ) <: (res: option (t * U32.t) { parser32_correct (parse_fldata p sz) input res } )))
+	  Correct (v, consumed)
+	end else Error e
+      | Error e' -> Error e'
+  ) <: (res: result (t * U32.t) err { parser32_correct (parse_fldata p sz e) input res } )))
 
 inline_for_extraction
 let parse32_fldata_strong
   (#k: parser_kind)
   (#t: Type0)
-  (#p: parser k t)
+  (#err: Type0)
+  (#p: parser k t err)
   (s: serializer p)
   (p32: parser32 p)
   (sz: nat)
   (sz32: U32.t { U32.v sz32 == sz } )
-: Tot (parser32 (parse_fldata_strong s sz))
+  (e: err)
+: Tot (parser32 (parse_fldata_strong s sz e))
 = (fun (input: bytes32) -> ((
-    match parse32_fldata p32 sz sz32 input with
-    | Some (v, consumed) ->
+    match parse32_fldata p32 sz sz32 e input with
+    | Correct (v, consumed) ->
       assert (
-        parse_fldata_strong_correct s sz (B32.reveal input) (U32.v consumed) v;
+        parse_fldata_strong_correct s sz e (B32.reveal input) (U32.v consumed) v;
         Seq.length (s v) == sz
       );
-      Some ((v <: parse_fldata_strong_t s sz), consumed)
-    | None -> None
+      Correct ((v <: parse_fldata_strong_t s sz), consumed)
+    | Error e -> Error e
     )   
-    <: (res: option (parse_fldata_strong_t s sz * U32.t) { parser32_correct (parse_fldata_strong s sz) input res } )))
+    <: (res: result (parse_fldata_strong_t s sz * U32.t) err { parser32_correct (parse_fldata_strong s sz e) input res } )))
 
 inline_for_extraction
 let serialize32_fldata_strong
   (#k: parser_kind)
   (#t: Type0)
-  (#p: parser k t)
+  (#err: Type0)
+  (#p: parser k t err)
   (#s: serializer p)
   (s32: partial_serializer32 s)
   (sz: nat { sz < 4294967296 } )
-: Tot (serializer32 (serialize_fldata_strong s sz))
+  (e: err)
+: Tot (serializer32 (serialize_fldata_strong s sz e))
 = (fun (input: parse_fldata_strong_t s sz) -> s32 input)

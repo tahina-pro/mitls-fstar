@@ -3,19 +3,19 @@ include LowParse.Spec.Int
 include LowParse.SLow.Base
 
 inline_for_extraction
-val parse32_u8: parser32 parse_u8
+val parse32_u8 (#err: Type0) (e: err) : Tot (parser32 (parse_u8 e))
 
 inline_for_extraction
-val serialize32_u8 : serializer32 serialize_u8
+val serialize32_u8 (#err: Type0) (e: err) : Tot (serializer32 (serialize_u8 e))
 
 inline_for_extraction
-val parse32_u16: parser32 parse_u16
+val parse32_u16 (#err: Type0) (e: err) : Tot (parser32 (parse_u16 e))
 
 inline_for_extraction
-val serialize32_u16 : serializer32 serialize_u16
+val serialize32_u16 (#err: Type0) (e: err) : Tot (serializer32 (serialize_u16 e))
 
 inline_for_extraction
-val parse32_u32: parser32 parse_u32
+val parse32_u32 (#err: Type0) (e: err) : Tot (parser32 (parse_u32 e))
 
 inline_for_extraction
-val serialize32_u32 : serializer32 serialize_u32
+val serialize32_u32 (#err: Type0) (e: err) : Tot (serializer32 (serialize_u32 e))

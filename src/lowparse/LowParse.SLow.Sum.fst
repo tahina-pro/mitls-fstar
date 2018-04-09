@@ -20,23 +20,25 @@ let serializer32_sum_gen_precond
 inline_for_extraction
 let serialize32_sum_gen'
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (#p: parser kt (sum_repr_type t))
+  (#p: parser kt (sum_repr_type t) err)
   (#s: serializer p)
-  (s32: serializer32 (serialize_enum_key _ s (sum_enum t)))
+  (e_key_invalid: err)
+  (s32: serializer32 (serialize_enum_key _ s (sum_enum t) e_key_invalid))
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (#sc: ((x: sum_key t) -> Tot (serializer (pc x))))
   (sc32: ((x: sum_key t) -> Tot (serializer32 (sc x))))
   (u: unit { serializer32_sum_gen_precond kt k } )
   (tag_of_data: ((x: sum_type t) -> Tot (y: sum_key_type t { y == sum_tag_of_data t x} )))
-: Tot (serializer32 (serialize_sum t s sc))
+: Tot (serializer32 (serialize_sum t s e_key_invalid sc))
 = fun (input: sum_type t) -> ((
     let tg = tag_of_data input in
     let stg = s32 tg in
     let s = sc32 tg input in
     B32.b32append stg s
-  ) <: (res: bytes32 { serializer32_correct (serialize_sum t s sc) input res } ))
+  ) <: (res: bytes32 { serializer32_correct (serialize_sum t s e_key_invalid sc) input res } ))
 
 (* Universal destructor *)
 
@@ -162,87 +164,94 @@ let enum_destr_cons_nil
      ) <: (y: t { eq y (f x) } )))
   ) e
 
-#set-options "--z3rlimit 64"
+#reset-options "--z3rlimit 128 --z3cliopt smt.arith.nl=false"
 
 inline_for_extraction
 let parse32_sum_gen'
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (p: parser kt (sum_repr_type t))
+  (p: parser kt (sum_repr_type t) err)
+  (e_key_invalid: err)
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (pc32: ((x: sum_key t) -> Tot (parser32 (pc x))))
-  (p32: parser32 (parse_enum_key p (sum_enum t)))
-  (destr: enum_destr_t (bytes32 -> Tot (option (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(option (sum_type t * U32.t)))) (sum_enum t))
-: Tot (parser32 (parse_sum t p pc))
+  (p32: parser32 (parse_enum_key p (sum_enum t) e_key_invalid))
+  (destr: enum_destr_t (bytes32 -> Tot (result (sum_type t * U32.t) err)) (feq bytes32 _ (eq2 #(result (sum_type t * U32.t) err))) (sum_enum t))
+: Tot (parser32 (parse_sum t p e_key_invalid pc))
 = fun (input: bytes32) -> ((
     match p32 input with
-    | Some (tg, consumed_tg) ->
+    | Correct (tg, consumed_tg) ->
       let input' = B32.b32slice input consumed_tg (B32.len input) in
-      begin match destr (fun (x: sum_key t) (input: bytes32) -> match pc32 x input with | Some (d, consumed_d) -> Some ((d <: sum_type t), consumed_d) | _ -> None) tg input' with
-      | Some (d, consumed_d) ->
-        // FIXME: implicit arguments are not inferred because (synth_tagged_union_data ...) is Tot instead of GTot
-        assert (parse (parse_synth #_ #_ #(sum_type t) (pc tg) (synth_tagged_union_data (sum_tag_of_data t) tg)) (B32.reveal input') == Some (d, U32.v consumed_d));
-        Some (d, U32.add consumed_tg consumed_d)
-      | _ -> None
+      begin match destr (fun (x: sum_key t) (input: bytes32) -> match pc32 x input with | Correct (d, consumed_d) -> Correct ((d <: sum_type t), consumed_d) | Error e' -> Error e') tg input' with
+      | Correct (d, consumed_d) ->
+        assert (parse (parse_synth (pc tg) (synth_tagged_union_data (sum_tag_of_data t) tg)) (B32.reveal input') == Correct (d, U32.v consumed_d));
+        Correct (d, U32.add consumed_tg consumed_d)
+      | Error e' -> Error e'
       end
-    | _ -> None
+    | Error e' -> Error e'
   )
-  <: (res: option (sum_type t * U32.t) { parser32_correct (parse_sum t p pc) input res } )
+  <: (res: result (sum_type t * U32.t) err { parser32_correct (parse_sum t p e_key_invalid pc) input res } )
   )
 
 #reset-options
 
 module Seq = FStar.Seq
 
+#reset-options "--z3rlimit 16 --z3cliopt smt.arith.nl=false"
+
 let parse_sum_with_nondep_aux
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (p: parser kt (sum_repr_type t))
+  (p: parser kt (sum_repr_type t) err)
+  (e_key_invalid: err)
   (#knd: parser_kind)
   (#nondep_t: Type0)
-  (pnd: parser knd nondep_t)
+  (pnd: parser knd nondep_t err)
   (#k: parser_kind)
-  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (input: bytes)
-: GTot (option ((nondep_t * sum_type t) * consumed_length input))
-= match parse (parse_enum_key p (sum_enum t)) input with
-  | Some (tg, consumed_tg) ->
+: GTot (result ((nondep_t * sum_type t) * consumed_length input) err)
+= match parse (parse_enum_key p (sum_enum t) e_key_invalid) input with
+  | Correct (tg, consumed_tg) ->
     let input1 = Seq.slice input consumed_tg (Seq.length input) in
     begin match parse pnd input1 with
-    | Some (nd, consumed_nd) ->
+    | Correct (nd, consumed_nd) ->
       let input2 = Seq.slice input1 consumed_nd (Seq.length input1) in
       begin match parse (pc tg) input2 with
-      | Some (d, consumed_d) ->
-        Some ((nd, d), consumed_tg + (consumed_nd + consumed_d))
-      | _ -> None
+      | Correct (d, consumed_d) ->
+        Correct ((nd, d), consumed_tg + (consumed_nd + consumed_d))
+      | Error e' -> Error e'
     end
-    | _ -> None
+    | Error e' -> Error e'
     end
-  | _ -> None
+  | Error e' -> Error e'
 
-#set-options "--z3rlimit 256 --max_fuel 32"
+#reset-options "--z3rlimit 256 --max_fuel 32 --z3cliopt smt.arith.nl=false"
 
 let parse_sum_with_nondep_aux_correct
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (p: parser kt (sum_repr_type t))
+  (p: parser kt (sum_repr_type t) err)
+  (e_key_invalid: err)
   (#knd: parser_kind)
   (#nondep_t: Type0)
-  (pnd: parser knd nondep_t)
+  (pnd: parser knd nondep_t err)
   (#k: parser_kind)
-  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (input: bytes)
 : Lemma
-  (parse_sum_with_nondep_aux t p pnd pc input == parse (parse_sum_with_nondep t p pnd pc) input)
-=   match parse (parse_enum_key p (sum_enum t)) input with
-    | Some (tg, consumed_tg) ->
+  (parse_sum_with_nondep_aux t p e_key_invalid pnd pc input == parse (parse_sum_with_nondep t p e_key_invalid pnd pc) input)
+=   match parse (parse_enum_key p (sum_enum t) e_key_invalid) input with
+    | Correct (tg, consumed_tg) ->
       let input1 = Seq.slice input consumed_tg (Seq.length input) in
       begin match parse pnd input1 with
-      | Some (nd, consumed_nd) ->
+      | Correct (nd, consumed_nd) ->
         let input2 = Seq.slice input1 consumed_nd (Seq.length input1) in
         begin match parse (pc tg) input2 with
-        | Some (d, consumed_d) ->
+        | Correct (d, consumed_d) ->
           // FIXME: implicit arguments are not inferred because (synth_tagged_union_data ...) is Tot instead of GTot
           let (tg' : sum_key (make_sum_with_nondep nondep_t t)) = (tg <: sum_key_type (make_sum_with_nondep nondep_t t)) in
           let (ndd_ : (nondep_t * sum_type t)) = (nd, (d <: sum_type t)) in
@@ -253,10 +262,10 @@ let parse_sum_with_nondep_aux_correct
           assert (sum_tag_of_data (make_sum_with_nondep nondep_t t) ndd_ == tg');
           let (ndd : sum_cases (make_sum_with_nondep nondep_t t) tg') = ndd_ in
           assert_norm (synth_sum_with_nondep_case nondep_t t tg (nd, d) == ndd);
-          let p1 : option (sum_cases (make_sum_with_nondep nondep_t t) tg' * consumed_length input1) = parse (parse_sum_with_nondep_cases t pnd pc tg') input1 in
-          assert (p1 == Some (ndd, consumed_nd + consumed_d));
+          let p1 : result (sum_cases (make_sum_with_nondep nondep_t t) tg' * consumed_length input1) err = parse (parse_sum_with_nondep_cases t pnd pc tg') input1 in
+          assert (p1 == Correct (ndd, consumed_nd + consumed_d));
 //          assert (parse (parse_sum_with_nondep t p pnd pc) input == Some (ndd_, consumed_tg + (consumed_nd + consumed_d)));
-          assert (parse (parse_synth #_ #_ #(sum_type (make_sum_with_nondep nondep_t t)) (parse_sum_with_nondep_cases t pnd pc tg) (synth_tagged_union_data (sum_tag_of_data (make_sum_with_nondep nondep_t t)) tg)) (input1) == Some (ndd_, consumed_nd + consumed_d));
+          assert (parse (parse_synth #_ #_ #(sum_type (make_sum_with_nondep nondep_t t)) (parse_sum_with_nondep_cases t pnd pc tg) (synth_tagged_union_data (sum_tag_of_data (make_sum_with_nondep nondep_t t)) tg)) (input1) == Correct (ndd_, consumed_nd + consumed_d));
 //          admit
           ()
         | _ -> ()
@@ -267,94 +276,102 @@ let parse_sum_with_nondep_aux_correct
 
 #reset-options
 
-#reset-options "--z3rlimit 64 --max_fuel 16 --max_ifuel 16 --z3cliopt smt.arith.nl=false"
+#reset-options "--z3rlimit 256 --max_fuel 16 --max_ifuel 16 --z3cliopt smt.arith.nl=false"
 
 inline_for_extraction
 let parse32_sum_with_nondep_aux
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (p: parser kt (sum_repr_type t))
+  (p: parser kt (sum_repr_type t) err)
+  (e_key_invalid: err)
   (#knd: parser_kind)
   (#nondep_t: Type0)
-  (#pnd: parser knd nondep_t)
+  (#pnd: parser knd nondep_t err)
   (pnd32: parser32 pnd)
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (pc32: ((x: sum_key t) -> Tot (parser32 (pc x))))
-  (p32: parser32 (parse_enum_key p (sum_enum t)))
-  (destr: enum_destr_t (bytes32 -> Tot (option (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(option (sum_type t * U32.t)))) (sum_enum t))
+  (p32: parser32 (parse_enum_key p (sum_enum t) e_key_invalid))
+  (destr: enum_destr_t (bytes32 -> Tot (result (sum_type t * U32.t) err)) (feq bytes32 _ (eq2 #(result (sum_type t * U32.t) err))) (sum_enum t))
   (input: bytes32)
-: Tot (option ((nondep_t * sum_type t) * U32.t))
+: Tot (result ((nondep_t * sum_type t) * U32.t) err)
 = match p32 input with
-  | Some (tg, consumed_tg) ->
+  | Correct (tg, consumed_tg) ->
     let input1 = B32.b32slice input consumed_tg (B32.len input) in
     begin match pnd32 input1 with
-    | Some (nd, consumed_nd) ->
+    | Correct (nd, consumed_nd) ->
       let input2 = B32.b32slice input1 consumed_nd (B32.len input1) in
       begin match 
-        destr (fun (x: sum_key t) (input: bytes32) -> match pc32 x input with | Some (d, consumed_d) -> Some ((d <: sum_type t), consumed_d) | _ -> None) tg input2
+        destr (fun (x: sum_key t) (input: bytes32) -> match pc32 x input with | Correct (d, consumed_d) -> Correct ((d <: sum_type t), consumed_d) | Error e' -> Error e') tg input2
       with
-      | Some (d, consumed_d) ->
+      | Correct (d, consumed_d) ->
         [@inline_let]
         let _ = assert (U32.v consumed_tg + (U32.v consumed_nd + U32.v consumed_d) < 4294967296) in
-        Some ((nd, d), U32.add consumed_tg (U32.add consumed_nd consumed_d))
-      | _ -> None
+        Correct ((nd, d), U32.add consumed_tg (U32.add consumed_nd consumed_d))
+      | Error e' -> Error e'
     end
-    | _ -> None
+    | Error e' -> Error e'
     end
-  | _ -> None
+  | Error e' -> Error e'
+
+#reset-options "--z3rlimit 64 --max_fuel 16 --max_ifuel 16 --z3cliopt smt.arith.nl=false"
 
 inline_for_extraction
 let parse32_sum_with_nondep_aux_correct
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (p: parser kt (sum_repr_type t))
+  (p: parser kt (sum_repr_type t) err)
+  (e_key_invalid: err)
   (#knd: parser_kind)
   (#nondep_t: Type0)
-  (#pnd: parser knd nondep_t)
+  (#pnd: parser knd nondep_t err)
   (pnd32: parser32 pnd)
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (pc32: ((x: sum_key t) -> Tot (parser32 (pc x))))
-  (p32: parser32 (parse_enum_key p (sum_enum t)))
-  (destr: enum_destr_t (bytes32 -> Tot (option (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(option (sum_type t * U32.t)))) (sum_enum t))
+  (p32: parser32 (parse_enum_key p (sum_enum t) e_key_invalid))
+  (destr: enum_destr_t (bytes32 -> Tot (result (sum_type t * U32.t) err)) (feq bytes32 _ (eq2 #(result (sum_type t * U32.t) err))) (sum_enum t))
   (input: bytes32)
 : Lemma
-  (parser32_correct (parse_sum_with_nondep t p pnd pc) input (parse32_sum_with_nondep_aux t p pnd32 pc32 p32 destr input))
-= let res = parse32_sum_with_nondep_aux t p pnd32 pc32 p32 destr input in
-  let gp = parse_sum_with_nondep_aux t p pnd pc (B32.reveal input) in
+  (parser32_correct (parse_sum_with_nondep t p e_key_invalid pnd pc) input (parse32_sum_with_nondep_aux t p e_key_invalid pnd32 pc32 p32 destr input))
+= let res = parse32_sum_with_nondep_aux t p e_key_invalid pnd32 pc32 p32 destr input in
+  let gp = parse_sum_with_nondep_aux t p e_key_invalid pnd pc (B32.reveal input) in
   assert (match res with
-  | None -> gp == None
-  | Some (hres, consumed) ->
-    Some? gp /\ (
-    let (Some (hres', consumed')) = gp in
+  | Error e' -> gp == Error e'
+  | Correct (hres, consumed) ->
+    Correct? gp /\ (
+    let (Correct (hres', consumed')) = gp in
     hres == hres' /\
     U32.v consumed == (consumed' <: nat)
   ));
-  parse_sum_with_nondep_aux_correct t p pnd pc (B32.reveal input)
+  parse_sum_with_nondep_aux_correct t p e_key_invalid pnd pc (B32.reveal input)
 
 #reset-options
 
 inline_for_extraction
 let parse32_sum_gen
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (p: parser kt (sum_repr_type t))
+  (p: parser kt (sum_repr_type t) err)
+  (e_key_invalid: err)
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (pc32: ((x: sum_key t) -> Tot (parser32 (pc x))))
   (#k' : parser_kind)
   (#t' : Type0)
-  (p' : parser k' t')
+  (p' : parser k' t' err)
   (u: unit {
     k' == and_then_kind (parse_filter_kind kt) k /\
     t' == sum_type t /\
-    p' == parse_sum t p pc
+    p' == parse_sum t p e_key_invalid pc
   })
-  (p32: parser32 (parse_enum_key p (sum_enum t)))
-  (destr: enum_destr_t (bytes32 -> Tot (option (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(option (sum_type t * U32.t)))) (sum_enum t))
+  (p32: parser32 (parse_enum_key p (sum_enum t) e_key_invalid))
+  (destr: enum_destr_t (bytes32 -> Tot (result (sum_type t * U32.t) err)) (feq bytes32 _ (eq2 #(result (sum_type t * U32.t) err))) (sum_enum t))
 : Tot (parser32 p')
-= parse32_sum_gen' t p pc32 p32 destr
+= parse32_sum_gen' t p e_key_invalid pc32 p32 destr
 
 inline_for_extraction
 let enum_head_key
@@ -449,38 +466,41 @@ let sum_destr_cons_nil
 inline_for_extraction
 let serialize32_sum_gen
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (#p: parser kt (sum_repr_type t))
+  (#p: parser kt (sum_repr_type t) err)
   (s: serializer p)
+  (e_key_invalid: err)
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (#sc: ((x: sum_key t) -> Tot (serializer (pc x))))
   (sc32: ((x: sum_key t) -> Tot (serializer32 (sc x))))
   (u: unit { serializer32_sum_gen_precond kt k } )
   (tag_of_data: ((x: sum_type t) -> Tot (y: sum_key_type t { y == sum_tag_of_data t x} )))
   (#k' : parser_kind)
   (#t' : Type0)
-  (#p' : parser k' t')
+  (#p' : parser k' t' err)
   (s' : serializer p')
   (u: unit {
     k' == and_then_kind (parse_filter_kind kt) k /\
     t' == sum_type t /\
-    p' == parse_sum t p pc /\
-    s' == serialize_sum t s sc
+    p' == parse_sum t p e_key_invalid pc /\
+    s' == serialize_sum t s e_key_invalid sc
   })
-  (s32: serializer32 (serialize_enum_key _ s (sum_enum t)))
+  (s32: serializer32 (serialize_enum_key _ s (sum_enum t) e_key_invalid))
   (destr: sum_destr bytes32 t)
 : Tot (serializer32 s')
 = [@inline_let]
   let sc32' (k: sum_key t) : Tot (serializer32 (sc k)) =
     (fun (x: refine_with_tag (sum_tag_of_data t) k) -> destr sc32 k x)
   in
-  (serialize32_sum_gen' t s32 sc32' () tag_of_data <: serializer32 s')
+  (serialize32_sum_gen' t e_key_invalid s32 sc32' () tag_of_data <: serializer32 s')
 
 inline_for_extraction
 let parse32_sum_cases
+  (#err: Type0)
   (t: sum)
-  (pc: ((x: sum_key t) -> Tot (k: parser_kind & parser k (sum_cases t x))))
+  (pc: ((x: sum_key t) -> Tot (k: parser_kind & parser k (sum_cases t x) err)))
   (pc32: ((x: sum_key t) -> Tot (parser32 (dsnd (pc x)))))
   (x: sum_key t)
 : Tot (parser32 (parse_sum_cases t pc x))
@@ -488,8 +508,9 @@ let parse32_sum_cases
 
 inline_for_extraction
 let serialize32_sum_cases
+  (#err: Type0)
   (s: sum)
-  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x)))
+  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x) err))
   (sr: (x: sum_key s) -> Tot (serializer (dsnd (f x))))
   (sr32: (x: sum_key s) -> Tot (serializer32 (sr x)))
   (x: sum_key s)
@@ -498,8 +519,9 @@ let serialize32_sum_cases
 
 inline_for_extraction
 let size32_sum_cases
+  (#err: Type0)
   (s: sum)
-  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x)))
+  (f: (x: sum_key s) -> Tot (k: parser_kind & parser k (sum_cases s x) err))
   (sr: (x: sum_key s) -> Tot (serializer (dsnd (f x))))
   (sr32: (x: sum_key s) -> Tot (size32 (sr x)))
   (x: sum_key s)
@@ -511,48 +533,52 @@ let size32_sum_cases
 inline_for_extraction
 let size32_sum_gen'
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (#p: parser kt (sum_repr_type t))
+  (#p: parser kt (sum_repr_type t) err)
   (#s: serializer p)
-  (s32: size32 (serialize_enum_key _ s (sum_enum t)))
+  (e_key_invalid: err)
+  (s32: size32 (serialize_enum_key _ s (sum_enum t) e_key_invalid))
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (#sc: ((x: sum_key t) -> Tot (serializer (pc x))))
   (sc32: ((x: sum_key t) -> Tot (size32 (sc x))))
   (u: unit { serializer32_sum_gen_precond kt k } )
   (tag_of_data: ((x: sum_type t) -> Tot (y: sum_key_type t { y == sum_tag_of_data t x} )))
-: Tot (size32 (serialize_sum t s sc))
+: Tot (size32 (serialize_sum t s e_key_invalid sc))
 = fun (input: sum_type t) -> ((
     let tg = tag_of_data input in
     let stg = s32 tg in
     let s = sc32 tg input in
     U32.add stg s
-  ) <: (res: U32.t { size32_postcond (serialize_sum t s sc) input res } ))
+  ) <: (res: U32.t { size32_postcond (serialize_sum t s e_key_invalid sc) input res } ))
 
 #reset-options
 
 inline_for_extraction
 let size32_sum_gen
   (#kt: parser_kind)
+  (#err: Type0)
   (t: sum)
-  (#p: parser kt (sum_repr_type t))
+  (#p: parser kt (sum_repr_type t) err)
   (#s: serializer p)
-  (s32: size32 (serialize_enum_key _ s (sum_enum t)))
+  (e_key_invalid: err)
+  (s32: size32 (serialize_enum_key _ s (sum_enum t) e_key_invalid))
   (#k: parser_kind)
-  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
+  (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x) err)))
   (#sc: ((x: sum_key t) -> Tot (serializer (pc x))))
   (sc32: ((x: sum_key t) -> Tot (size32 (sc x))))
   (u: unit { serializer32_sum_gen_precond kt k } )
   (tag_of_data: ((x: sum_type t) -> Tot (y: sum_key_type t { y == sum_tag_of_data t x} )))
   (#k' : parser_kind)
   (#t' : Type0)
-  (#p' : parser k' t')
+  (#p' : parser k' t' err)
   (s' : serializer p')
   (u: unit {
     k' == and_then_kind (parse_filter_kind kt) k /\
     t' == sum_type t /\
-    p' == parse_sum t p pc /\
-    s' == serialize_sum t s sc
+    p' == parse_sum t p e_key_invalid pc /\
+    s' == serialize_sum t s e_key_invalid sc
   })
   (destr: sum_destr U32.t t)
 : Tot (size32 s')
@@ -560,4 +586,4 @@ let size32_sum_gen
   let sc32' (k: sum_key t) : Tot (size32 (sc k)) =
     (fun (x: refine_with_tag (sum_tag_of_data t) k) -> destr sc32 k x)
   in
-  (size32_sum_gen' t s32 sc32' () tag_of_data <: size32 s')
+  (size32_sum_gen' t e_key_invalid s32 sc32' () tag_of_data <: size32 s')

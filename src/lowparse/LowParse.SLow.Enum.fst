@@ -68,11 +68,12 @@ inline_for_extraction
 let parse32_maybe_enum_key_gen
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (#p: parser k repr)
+  (#err: Type0)
+  (#p: parser k repr err)
   (p32: parser32 p)
   (e: enum key repr)
   (#k' : parser_kind)
-  (p' : parser k' (maybe_enum_key e))
+  (p' : parser k' (maybe_enum_key e) err)
   (u: unit {
     k' == k /\
     p' == parse_maybe_enum_key p e
@@ -81,31 +82,33 @@ let parse32_maybe_enum_key_gen
 : Tot (parser32 p')
 = parse32_synth p (maybe_enum_key_of_repr e) f p32 ()
 
-#set-options "--z3rlimit 32 --max_fuel 8 --max_ifuel 8"
+#set-options "--z3rlimit 64 --max_fuel 16 --max_ifuel 16"
 
 inline_for_extraction
 let parse32_enum_key_gen
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (p: parser k repr)
+  (#err: Type0)
+  (p: parser k repr err)
   (e: enum key repr)
+  (e_key_invalid: err)
   (#k' : parser_kind)
-  (p' : parser k' (enum_key e))
+  (p' : parser k' (enum_key e) err)
   (u: unit {
     k' == parse_filter_kind k /\
-    p' == parse_enum_key p e
+    p' == parse_enum_key p e e_key_invalid
   })
   (pe: parser32 (parse_maybe_enum_key p e))
 : Tot (parser32 p')
 = (fun (input: bytes32) -> ((
     match pe input with
-    | Some (k, consumed) ->
+    | Correct (k, consumed) ->
       begin match k with
-      | Known k' -> Some (k', consumed)
-      | _ -> None
+      | Known k' -> Correct (k', consumed)
+      | _ -> Error e_key_invalid
       end
-    | _ -> None
-  ) <: (res: option (enum_key e * U32.t) { parser32_correct (parse_enum_key p e) input res } )))
+    | Error e' -> Error e'
+  ) <: (res: result (enum_key e * U32.t) err { parser32_correct (parse_enum_key p e e_key_invalid) input res } )))
 
 #reset-options
 
@@ -120,21 +123,23 @@ inline_for_extraction
 let serialize32_enum_key_gen
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (#p: parser k repr)
+  (#err: Type0)
+  (#p: parser k repr err)
   (#s: serializer p)
   (s32: serializer32 s)
   (e: enum key repr)
+  (e_key_invalid: err)
   (#k' : parser_kind)
-  (#p' : parser k' (enum_key e))
+  (#p' : parser k' (enum_key e) err)
   (s' : serializer p')
   (u: unit {
     k' == parse_filter_kind k /\
-    p' == parse_enum_key p e /\
-    s' == serialize_enum_key p s e
+    p' == parse_enum_key p e e_key_invalid /\
+    s' == serialize_enum_key p s e e_key_invalid
   })
   (f: enum_repr_of_key'_t e)
 : Tot (serializer32 s')
-= fun (input: enum_key e) -> ((s32 (f input)) <: (r: bytes32 { serializer32_correct (serialize_enum_key p s e) input r } ))
+= fun (input: enum_key e) -> ((s32 (f input)) <: (r: bytes32 { serializer32_correct (serialize_enum_key p s e e_key_invalid) input r } ))
 
 inline_for_extraction
 let enum_repr_of_key_cons
@@ -170,11 +175,13 @@ inline_for_extraction
 let serialize32_maybe_enum_key_gen'
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (#p: parser k repr)
+  (#err: Type0)
+  (#p: parser k repr err)
   (#s: serializer p)
   (s32: serializer32 s)
   (e: enum key repr)
-  (f: serializer32 (serialize_enum_key p s e))
+  (e_key_invalid: err)
+  (f: serializer32 (serialize_enum_key p s e e_key_invalid))
 : Tot (serializer32 (serialize_maybe_enum_key p s e))
 = fun (input: maybe_enum_key e) -> ((
     match input with
@@ -186,12 +193,14 @@ inline_for_extraction
 let serialize32_maybe_enum_key_gen
   (#k: parser_kind)
   (#key #repr: eqtype)
-  (#p: parser k repr)
+  (#err: Type0)
+  (#p: parser k repr err)
   (#s: serializer p)
   (s32: serializer32 s)
   (e: enum key repr)
+  (e_dummy: err)
   (#k' : parser_kind)
-  (#p' : parser k' (maybe_enum_key e))
+  (#p' : parser k' (maybe_enum_key e) err)
   (s' : serializer p')
   (u: unit {
     k == k' /\
@@ -200,5 +209,5 @@ let serialize32_maybe_enum_key_gen
   })
   (f: enum_repr_of_key'_t e)
 : Tot (serializer32 s')
-= serialize32_maybe_enum_key_gen' s32 e
-    (serialize32_enum_key_gen s32 e (serialize_enum_key _ s e) () f)
+= serialize32_maybe_enum_key_gen' s32 e e_dummy
+    (serialize32_enum_key_gen s32 e e_dummy (serialize_enum_key _ s e e_dummy) () f)
