@@ -1,7 +1,12 @@
 module Test.TLSConstants
+
 open FStar.Error
+open FStar.HyperStack.ST
+
 open TLSError
 open TLSConstants
+
+#set-options "--lax"
 
 let test_signatureSchemeListBytes ()
   : Stack (option (either (FStar.Bytes.bytes * string * string)

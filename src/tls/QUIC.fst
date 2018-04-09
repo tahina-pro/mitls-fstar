@@ -1,5 +1,5 @@
 module QUIC
- 
+
 /// QUIC-specific interface on top of our main TLS API
 /// * establishes session & exported keys: no application-data traffic!
 /// * simplified configuration, with reasonable defaults
@@ -11,17 +11,17 @@ module QUIC
 ///
 /// Relying on FFI for accessing configs, callbacks, etc.
 /// Testing both in OCaml (TCP-based, TestQUIC ~ TestFFI) and in C.
-open FStar.String
+
 open FStar.Bytes
 open FStar.Error
+open FStar.HyperStack.All
+
 open TLSConstants
 open TLSInfo
-open Range
 open DataStream
 open TLS
 open FFICallbacks
 
-open FStar.HyperStack.All
 module HS = FStar.HyperStack
 
 #set-options "--lax"

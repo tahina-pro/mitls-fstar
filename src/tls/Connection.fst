@@ -3,7 +3,6 @@ module Connection
 // Connections are top-level instances of TLS clients and servers
 
 open FStar.Heap
-
 open FStar.HyperStack
 // JP: please stop using opening so much stuff in scope srsly
 open FStar.Seq
@@ -13,16 +12,15 @@ open FStar.Seq
 open FStar.Bytes
 open FStar.Error
 
+open Mem
 open TLSError
 open TLSConstants
 open TLSInfo
   
+module Range = Range
 open Range
-
 open Epochs
 open Handshake
-
-
 
 module HS = FStar.HyperStack
 
@@ -58,7 +56,7 @@ let string_of_halfState = function
 let string_of_state (r,w) =
   string_of_halfState r^"/"^string_of_halfState w
 
-type c_rgn = r:TLSConstants.rgn { HS.disjoint r TLSConstants.tls_region } 
+type c_rgn = r:rgn { HS.disjoint r tls_region } 
 
 (*
  * AR: changing the type of state from rref to ref, with region captured in the refinement.

@@ -4,16 +4,14 @@ module HS = FStar.HyperStack //Added automatically
 // adding an indirection to TCP for applications that prefer to take control of their IOs.
 
 open FStar.HyperStack.All
-
 open FStar.Bytes
 open FStar.Error
 open TLSError
-
+open Mem
 
 /// 18-01-23 We now have function pointers matching the types used in
 /// mitls.h. After hoisting for Kremlin extraction, we treat the
 /// explicit context as a dyn to avoid climbing in universes.
-
 type pvoid = FStar.Dyn.dyn
 type size_t = UInt32.t 
 type pfn_send = 

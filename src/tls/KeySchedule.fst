@@ -1,174 +1,22 @@
 module KeySchedule
 
-open FStar.Heap
-
-open FStar.HyperStack
-open FStar.Seq
-open FStar.Set
+// cwinter: this file should be removed, but Epochs.fst still depends on these remaining definitions.
 
 open FStar.Bytes
-open FStar.Error
-open TLSError
-open TLSConstants
-open Extensions
+
 open TLSInfo
-open Range
-open StatefulLHAE
-open HKDF
-open PSK
+open TLSConstants
 
-module MM = FStar.Monotonic.DependentMap
+type ms = FStar.Bytes.bytes
+type pms = FStar.Bytes.bytes
+type ems #li (i:exportId li) = Hashing.Spec.tag (exportId_hash i)
 
-
-module HS = FStar.HyperStack
-module ST = FStar.HyperStack.ST
-module H = Hashing.Spec
-
-(* A flag for runtime debugging of computed keys.
-   The F* normalizer will erase debug prints at extraction
-   when this flag is set to false *)
-let discard (b:bool): ST unit (requires (fun _ -> True))
- (ensures (fun h0 _ h1 -> h0 == h1)) = ()
-let print s = discard (IO.debug_print_string ("KS | "^s^"\n"))
-unfold let dbg : string -> ST unit (requires (fun _ -> True))
-  (ensures (fun h0 _ h1 -> h0 == h1)) =
-  if DebugFlags.debug_KS then print else (fun _ -> ())
-
-#set-options "--lax"
-
-let print_share (#g:CommonDH.group) (s:CommonDH.share g) : ST unit
-  (requires (fun h0 -> True))
-  (ensures (fun h0 _ h1 -> modifies_none h0 h1))
-  =
-  let kb = CommonDH.serialize_raw #g s in
-  let kh = FStar.Bytes.hex_of_bytes kb in
-  dbg ("Share: "^kh)
-
-(********************************************
-*    Resumption PSK is disabled for now     *
-*********************************************
-
-abstract type res_psk (i:rmsId) =
-  b:bytes{exists i.{:pattern index b i} index b i <> 0z}
-
-abstract type res_context (i:rmsId) =
-  b:bytes{length b = CoreCrypto.H.tagLen (rmsId_hash i)}
-
-private type res_psk_entry (i:rmsId) =
-  (res_psk i) * (res_context i) * ctx:psk_context * leaked:(rref tls_tables_region bool)
-
-let res_psk_injective (m:MM.map' rmsId res_psk_entry) =
-  forall i1 i2.{:pattern (MM.sel m i1); (MM.sel m i2)}
-       i1 = i2 <==> (match MM.sel m i1, MM.sel m i2 with
-                  | Some (psk1, _, _, _), Some (psk2, _, _, _) -> b2t (equalBytes psk1 psk2)
-                  | _ -> True)
-
-let res_psk_table : MM.t tls_tables_region rmsId res_psk_entry res_psk_injective =
-  MM.alloc #TLSConstants.tls_tables_region #rmsId #res_psk_entry #res_psk_injective
-
-let registered_res_psk (i:rmsId) (h:HH.t) =
-  b2t (Some? (MM.sel (HS.sel h res_psk_table) i))
-
-let res_psk_context (i:rmsId{registered_res_psk i}) =
-  let (_, _, c, _) = Some.v (MM.sel res_psk_table i) in c
-
-private let res_psk_value (i:rmsId{registered_res_psk i}) =
-  let (psk, _, _, _) = Some.v (MM.sel res_psk_table i) in psk
-
-**)
-
-// PSK (internal/external multiplex, abstract)
-// Note that application PSK is externally defined but should
-// be idealized together with KS
-abstract let psk (i:esId) =
-  b:bytes{length b = H.tagLen (esId_hash i)}
-
-let read_psk (i:PSK.pskid)
-  : ST (esId * pskInfo * PSK.app_psk i)
-  (requires fun h -> True)
-  (ensures fun h0 _ h1 -> modifies_none h0 h1)
-  =
-  let c = PSK.psk_info i in
-  let id =
-    if Some? c.ticket_nonce then
-      let (| li, rmsid |) = Ticket.dummy_rmsid c.early_ae c.early_hash in
-      ResumptionPSK #li rmsid
-    else
-      ApplicationPSK #(c.early_hash) #(c.early_ae) i
-    in
-  (id, c, PSK.psk_value i)
-
-// Resumption context
-let rec esId_rc : (esId -> St bytes) =
-  function
-  | NoPSK h -> H.zeroHash h
-
-and hsId_rc : (hsId -> St bytes) = function
-  | HSID_DHE (Salt i) _ _ _ -> secretId_rc i
-  | HSID_PSK (Salt i) -> secretId_rc i
-
-and asId_rc : (asId -> St bytes) = function
-  | ASID (Salt i) -> secretId_rc i
-
-and secretId_rc : (secretId -> St bytes) = function
-  | EarlySecretID i -> esId_rc i
-  | HandshakeSecretID i -> hsId_rc i
-  | ApplicationSecretID i -> asId_rc i
-
-// miTLS 0.9:
-// ==========
-// PRF (type pms) -> TLSInfo (type id) -> KEF (extract pms)
-//                     \ StatefulLHAE (coerce id) /
-// TODO rework old 1.2 types
-type ms = bytes
-type pms = bytes
-
-// Early secret (abstract)
-abstract type es (i:esId) = H.tag (esId_hash i)
-
-// Handshake secret (abstract)
-abstract type hs (i:hsId) = H.tag (hsId_hash i)
-type fink (i:finishedId) = HMAC.UFCMA.key (HMAC.UFCMA.HMAC_Finished i) (fun _ -> True)
-let trivial (_: bytes) = True
-type binderKey (i:binderId) = HMAC.UFCMA.key (HMAC.UFCMA.HMAC_Binder i) trivial
-
-// TLS 1.3 master secret (abstract)
-abstract type ams (i:asId) = H.tag (asId_hash i)
-
-type rekeyId (li:logInfo) = i:expandId li{
-  (let ExpandedSecret _ t _ = i in
-    ApplicationTrafficSecret? t \/
-    ClientApplicationTrafficSecret? t \/
-    ServerApplicationTrafficSecret? t)}
-
-abstract type rekey_secrets #li (i:expandId li) =
-  H.tag (expandId_hash i) * H.tag (expandId_hash i)
-
-// Leaked to HS for tickets
-(*abstract*) type rms #li (i:rmsId li) = H.tag (rmsId_hash i)
-
-type ems #li (i:exportId li) = H.tag (exportId_hash i)
-
-// TODO this is superseeded by StAE.state i
-// but I'm waiting for it to be tested to switch over
-// TODO use the newer index types
 type recordInstance =
   | StAEInstance: #id:TLSInfo.id -> StAE.reader (peerId id) -> StAE.writer id -> recordInstance
 
-(* 2 choices - I prefer the second:
-     (1) replace recordInstance in this module with Epochs.epoch, but that requires dependence on more than just $id
-   (2) redefine recordInstance as follows, and then import epoch_region_inv over here from Epochs:
-type recordInstance (rgn:rid) (n:TLSInfo.random) =
-| RI: #id:StAE.id -> r:StAE.reader (peerId id) -> w:StAE.writer id{epoch_region_inv' rgn r w /\ I.nonce_of_id id = n} -> recordInstance rgn n
-
-In (2) we would define Epochs.epoch as:
-type epoch (hs_rgn:rgn) (n:TLSInfo.random) =
-  | Epoch: h:handshake ->
-           r:recordInstance hs_rgn n ->
-           epich hs_rgn n
-*)
-
 type exportKey = (li:logInfo & i:exportId li & ems i)
+
+(* 2018.03.08 SZ: The rest was in quic2c:
 
 // Note from old miTLS (in TLSInfo.fst)
 // type id = {
@@ -261,8 +109,8 @@ let create #rid r =
     | Server -> S (S_Init nonce) in
   (KS #ks_region (ralloc ks_region istate)), nonce
 
-private let group_of_supported_namedGroup
-  (g:CommonDH.supportedNamedGroup)
+private let group_of_valid_namedGroup
+  (g:valid_namedGroup)
   : CommonDH.group
   = Some?.v (CommonDH.group_of_namedGroup g)
 
@@ -281,7 +129,7 @@ private let keygen (g:CommonDH.group)
   : St (g:CommonDH.group & CommonDH.keyshare g)
   = (| g, CommonDH.keygen g |)
 
-val ks_client_init: ks:ks -> ogl: option (CommonDH.supportedNamedGroups)
+val ks_client_init: ks:ks -> ogl: option (list valid_namedGroup)
   -> ST (option CommonDH.clientKeyShare)
   (requires fun h0 ->
     let kss = sel h0 (KS?.state ks) in
@@ -316,7 +164,7 @@ let ks_client_init ks ogl =
     st := C (C_12_Full_CH cr);
     None
   | Some gl -> // TLS 1.3
-    let groups = List.Tot.map group_of_supported_namedGroup gl in
+    let groups = List.Tot.map group_of_valid_namedGroup gl in
     let gs = map_ST_keygen groups in
     let gxl = List.Tot.choose serialize_share gs in
     st := C (C_13_wait_SH cr [] gs);
@@ -463,7 +311,7 @@ let ks_server_13_init ks cr cs pskid g_gx =
       dbg ("Using negotiated PSK identity: "^(print_bytes id));
       let i, psk, h : esId * bytes * Hashing.Spec.alg =
         match Ticket.check_ticket id with
-        | Some (Ticket.Ticket13 cs li rmsId rms _ _) ->
+        | Some (Ticket.Ticket13 cs li rmsId rms _ _ _) ->
           dbg ("Ticket RMS: "^(print_bytes rms));
           let i = ResumptionPSK #li rmsId in
           let CipherSuite13 _ h = cs in
@@ -1267,3 +1115,4 @@ let ks_client_12_server_finished ks
 
 val getId: recordInstance -> GTot id
 let getId (StAEInstance #i rd wr) = i
+*)

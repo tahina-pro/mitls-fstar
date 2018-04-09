@@ -1,19 +1,18 @@
 module AEADOpenssl
-module HS = FStar.HyperStack //Added automatically
-module HST = FStar.HyperStack.ST //Added automatically
 
 open FStar.Heap
-
 open FStar.HyperStack
 open FStar.Seq
 open FStar.Bytes
 open CoreCrypto
 
+open Mem
 open TLSConstants
 open TLSInfo
 
 module MM = FStar.Monotonic.DependentMap
-
+module HS = FStar.HyperStack
+module HST = FStar.HyperStack.ST
 
 type id = i:id{~(PlaintextID? i) /\ AEAD? (aeAlg_of_id i)}
 let alg (i:id) = AEAD?._0 (aeAlg_of_id i)
@@ -186,6 +185,7 @@ val decrypt: #i:id -> #l:plainlen -> d:reader i ->
      correct_decrypt d iv ad c res h1
   ))
 
+#set-options "--lax" //18-02-18 
 let decrypt #i #l d iv ad c =
   if authId i then
    begin

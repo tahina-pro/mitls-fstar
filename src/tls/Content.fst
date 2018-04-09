@@ -6,7 +6,6 @@ module Content // was TLSFragment
 
 open FStar
 open FStar.Seq
-
 open FStar.Bytes
 open FStar.Error
 
@@ -15,6 +14,7 @@ open TLSConstants
 open TLSInfo
 open Range
 open DataStream
+open Parse
 module Range = Range
 
 // this description is detailed enough to compute the size of the plaintext and ciphertext

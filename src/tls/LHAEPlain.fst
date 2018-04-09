@@ -7,7 +7,11 @@ open FStar.Error
 open TLSError
 open TLSConstants
 open TLSInfo
-open Range
+open Parse
+
+module Range = Range
+let range = Range.range
+let rbytes = Range.rbytes
 
 //--------------------------------------------------------------------
 // `Plain' interface towards LHAE
@@ -34,6 +38,7 @@ let makeAD i seqn (ad:StatefulPlain.adata i) : adata i =
 
 val seqN: i:id -> adata i -> Tot seqn
 let seqN i ad =
+//18-02-26 review?
 //    let snb,ad = FStar.Bytes.split_eq ad 8 in //TODO bytes NS 09/27
     let snb,ad = FStar.Bytes.split ad 8ul in    
     seq_of_bytes snb
@@ -66,7 +71,7 @@ val repr: i:id{ ~(safeId i)} -> ad:adata i -> r:range -> p:plain i ad r -> Tot (
 let repr i ad rg p = StatefulPlain.repr i (parseAD ad) rg p
 
 val mk_plain: i:id{ ~(authId i)} -> ad:adata i -> 
-  rg:(frange i){ StatefulPlain.wf_ad_rg i (parseAD ad) rg } ->
+  rg:(Range.frange i){ StatefulPlain.wf_ad_rg i (parseAD ad) rg } ->
   b:rbytes rg { StatefulPlain.wf_payload_ad_rg i (parseAD ad) rg b } ->
     Tot (p:plain i ad rg {b = ghost_repr #i #ad #rg p})
 let mk_plain i ad rg b = StatefulPlain.mk_plain i (parseAD ad) rg b

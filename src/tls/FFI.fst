@@ -1,6 +1,6 @@
 module FFI
-module HS = FStar.HyperStack //Added automatically
-module HST = FStar.HyperStack.ST
+
+
 // A thin layer on top of TLS, adapting a bit our main API:
 // - for TCP send & receive, we use callbacks provided by the application
 // - for output traffic, we send fragment and send the whole message at once
@@ -14,9 +14,15 @@ module HST = FStar.HyperStack.ST
 open FStar.Bytes
 open FStar.Error
 
+module HS = FStar.HyperStack
+module HST = FStar.HyperStack.ST
+
 open TLSConstants
 open TLSInfo
+module Range = Range
 open Range
+
+open Mem
 open DataStream
 open TLS
 //open FFICallbacks
@@ -358,14 +364,14 @@ let ffiSetALPN cfg x =
 
 val ffiSetEarlyData: cfg:config -> x:UInt32.t -> ML config
 let ffiSetEarlyData cfg x =
-  trace ("setting early data limit to "^(hex_of_bytes (bytes_of_int32 x)));
+  trace ("setting early data limit to "^(hex_of_bytes (Parse.bytes_of_uint32 x)));
   { cfg with
   max_early_data = if x = 0ul then None else Some x;
   }
 
 val ffiAddCustomExtension: cfg:config -> UInt16.t -> bytes -> ML config
 let ffiAddCustomExtension cfg h b =
-  trace ("offering custom extension "^(hex_of_bytes (bytes_of_uint16 h)));
+  trace ("offering custom extension "^(hex_of_bytes (Parse.bytes_of_uint16 h)));
   trace ("extension contents: "^(hex_of_bytes b));
   { cfg with
   custom_extensions = (h, b) :: cfg.custom_extensions
@@ -383,7 +389,7 @@ let install_ticket config ticket : ML (list PSK.psk_identifier) =
     (match Ticket.parse si with
     | Some (Ticket.Ticket12 pv cs ems msId ms) ->
       PSK.s12_extend t (pv, cs, ems, ms); [t]
-    | Some (Ticket.Ticket13 cs li rmsId rms created age_add) ->
+    | Some (Ticket.Ticket13 cs li rmsId rms created age_add _) ->
       (match PSK.psk_lookup t with
       | Some _ ->
         trace ("input ticket "^(print_bytes t)^" is in PSK database")
@@ -501,7 +507,7 @@ let ffiTicketInfoBytes (info:ticketInfo) (key:bytes) =
       let ae = ctx.early_ae in
       let h = ctx.early_hash in
       let (| li, rmsid |) = Ticket.dummy_rmsid ae h in
-      Ticket.Ticket13 (CipherSuite13 ae h) li rmsid key ctx.time_created ctx.ticket_age_add
+      Ticket.Ticket13 (CipherSuite13 ae h) li rmsid key ctx.time_created ctx.ticket_age_add empty_bytes
     | TicketInfo_12 (pv, cs, ems) ->
       Ticket.Ticket12 pv cs ems (Ticket.dummy_msId pv cs ems) key
     in
@@ -516,7 +522,7 @@ private let rec ext_filter (ext_type:UInt16.t) (e:list Extensions.extension) : o
   match e with
   | [] -> None
   | Extensions.E_unknown_extension hd b :: t ->
-    if uint16_of_bytes hd = ext_type then Some b else ext_filter ext_type t
+    if Parse.uint16_of_bytes hd = ext_type then Some b else ext_filter ext_type t
   | _ :: t -> ext_filter ext_type t
 
 let ffiFindCustomExtension (server:bool) (exts:bytes) (ext_type:UInt16.t) : ML (option bytes) =

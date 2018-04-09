@@ -5,17 +5,19 @@ module HS = FStar.HyperStack //Added automatically
 // We support both AES_128_GCM and AES_256_GCM, differing only in their key sizes
 
 open FStar.Heap
-
 open FStar.HyperStack
 open FStar.Seq
 open FStar.Bytes
 open CoreCrypto
 
+open Mem
 open TLSConstants
 open TLSInfo
 open LHAEPlain
 
+module Range = Range
 open Range
+
 open FStar.Monotonic.Seq
 
 module Range = Range
@@ -44,11 +46,10 @@ type entry (i:id) = // records that c is an encryption of p with ad
 
 let ideal_log (r:rgn) (i:id) = log_t r (entry i)
 
-let log_ref (r:rgn) (i:id) : Tot Type0 =
+let log_ref (r:rgn) (i:id): Tot Type0 =
   if authId i then ideal_log r i else unit
 
-let ilog (#r:rgn) (#i:id) (l:log_ref r i{authId i}) : Tot (ideal_log r i) =
-  l
+let ilog (#r:rgn) (#i:id) (l:log_ref r i{authId i}): ideal_log r i = l
 
 (** we have a counter, that's increasing, at most to the min(length log, 2^64-1) *)
 let ideal_ctr (#l:rgn) (r:rgn) (i:id) (log:ideal_log l i) : Tot Type0 =
@@ -186,7 +187,7 @@ let concrete_encrypt (#i:id) (e:writer i)
   (requires (fun h0 ->
     AEAD.st_inv e.aead h0))
   (ensures (fun h0 c h1 ->
-    length c = Range.targetLength i rg /\
+    length c = targetLength i rg /\
     modifies_one (AEAD.log_region e.aead) h0 h1))
   =
   let h = get() in
@@ -246,8 +247,7 @@ let encrypt #i e ad rg p =
   let n = HST.op_Bang ctr in
   assume(AEAD.st_inv e.aead h0);
   let c = concrete_encrypt e n ad rg p in
-  if authId i then
-    begin
+  if authId i then (
     let log = ilog e.log in
     HST.recall log;
     let ictr: ideal_ctr e.region i log = e.counter in
@@ -255,8 +255,7 @@ let encrypt #i e ad rg p =
     write_at_end log (Entry c ad p);
     HST.recall ictr;
     increment_seqn ictr;
-    HST.recall ictr
-    end
+    HST.recall ictr)
   else
     begin
     HST.recall ctr;
@@ -339,8 +338,8 @@ let decrypt #i d ad c =
         None
       else
 	begin
-	HST.op_Colon_Equals ctr (j + 1);
-	assert (Range.within (FStar.Bytes.length text) r);
+	ctr := j + 1;
+	assert (FStar.Bytes.length text `within` r);
 	let plain = mk_plain i ad r text in
         Some plain
 	end

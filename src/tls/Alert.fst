@@ -1,15 +1,17 @@
 module Alert
 
 open FStar.Heap
-
 open FStar.Seq
-
 open FStar.Error
 open FStar.Bytes
 
 open TLSError
 open TLSConstants
 open TLSInfo
+open Parse
+open Mem
+
+module Range = Range
 open Range
 
 //16-05-29 not much protocol left; consider merging with TLSError

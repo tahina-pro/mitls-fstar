@@ -1,19 +1,20 @@
 module HandshakeLog
 
-open FStar.Heap
+(* see als comments in Handshake.fsti *) 
 
-open FStar.HyperStack
 open FStar.Seq
- // for e.g. found
 open FStar.Set
 open FStar.Error
 open FStar.Bytes
+
+open Mem 
 open TLSError
 open TLSConstants
 open TLSInfo
 open HandshakeMessages
 open Hashing
 open Hashing.CRF // now using incremental, collision-resistant, agile Hashing.
+open Range  // cwinter: the extracted OCaml file contains a reference to this, which is not reflected in the .depend file?
 
 module HS = FStar.HyperStack
 
@@ -294,7 +295,7 @@ let load_stateless_cookie l hrr digest =
   let st = !l in
   // The cookie is loaded after CH2 is written to the hash buffer
   let OpenHash ch2b = st.hashes in
-  let fake_ch = (bytes_of_hex "fe0000") @| (vlbytes 1 digest) in
+  let fake_ch = (bytes_of_hex "fe0000") @| (Parse.vlbytes 1 digest) in
   trace ("Installing prefix to transcript: "^(hex_of_bytes fake_ch));
   let hrb = handshakeMessageBytes None (HelloRetryRequest hrr) in
   trace ("HRR bytes: "^(hex_of_bytes hrb));
@@ -391,7 +392,7 @@ let send_signals l next_keys1 complete1 =
     | Some (enable_appdata,skip_0rtt) -> Some (enable_appdata, None, skip_0rtt)
     | None -> None in
   l := State transcript outgoing outgoing_next_keys1 complete1  incoming parsed hashes pv kex dh_group
-
+ 
 let next_fragment l (i:id) =
   let st = !l in
   // do we have a fragment to send?
@@ -435,7 +436,7 @@ let next_fragment l (i:id) =
               st.transcript outgoing' st.outgoing_next_keys st.outgoing_complete
               st.incoming st.parsed st.hashes st.pv st.kex st.dh_group;
       Outgoing fragment None false )
-
+ 
 (* RECEIVE *)
 
 //17-04-24 avoid parsing loop? may be simpler at the level of receive.
@@ -502,7 +503,7 @@ let rec hashHandshakeMessages t p hs n nb =
           | HelloRetryRequest hrr ->
             let ha = verifyDataHashAlg_of_ciphersuite hrr.hrr_cipher_suite in
             let hmsg = Hashing.compute ha b in
-            let hht = (bytes_of_hex "fe0000") @| (vlbytes 1 hmsg) in
+            let hht = (bytes_of_hex "fe0000") @| (Parse.vlbytes 1 hmsg) in
             trace ("Replacing CH1 in transcript with "^(hex_of_bytes hht));
             trace ("HRR bytes: "^(hex_of_bytes mb));
             OpenHash (hht @| mb)

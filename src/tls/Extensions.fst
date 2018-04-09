@@ -11,8 +11,10 @@ module Extensions
 
 open FStar.Bytes
 open FStar.Error
+
 open TLSError
 open TLSConstants
+open Parse
 
 //NS: hoisting a convenient function to avoid a closure conversion
 let rec existsb2 (f: 'a -> 'b -> bool) (x:'a) (y:list 'b) : bool =
@@ -43,8 +45,11 @@ let pskiBytes (i,ot) =
 
 private
 let pskiListBytes_aux acc pski = acc @| pskiBytes pski
+
+//val pskiListBytes: list pskIdentity -> bytes
 let pskiListBytes ids =
   List.Tot.fold_left pskiListBytes_aux empty_bytes ids
+
 
 let rec binderListBytes_aux (bl:list binder)
     : Tot (b:bytes{length b <= op_Multiply (List.Tot.length bl) 256}) =
@@ -78,7 +83,8 @@ let rec parseBinderList_aux (b:bytes) (binders:list binder)
       if length b >= 5 then
         match vlsplit 1 b with
         | Error z -> error "parseBinderList failed to parse a binder"
-        | Correct (binder, bytes) ->
+        | Correct (x) ->
+          let binder, bytes = x in
           if length binder < 32 then error "parseBinderList: binder too short"
             else (assume (length bytes < length b);
                   parseBinderList_aux bytes (binders @ [binder]))
@@ -119,7 +125,8 @@ let parsePskIdentity b =
   else
     match vlsplit 2 b with
     | Error z -> error "malformed PskIdentity"
-    | Correct (id, ota) ->
+    | Correct (x) ->
+      let id, ota = x in
       if length ota = 4 then
         let ota = uint32_of_bytes ota in
         lemma_repr_bytes_values (length id);
@@ -132,7 +139,8 @@ let rec parsePskIdentities_aux : b:bytes -> list pskIdentity -> Tot (result (lis
       if length b >= 2 then
         match vlsplit 2 b with
         | Error z -> error "parsePskIdentities failed to parse id"
-        | Correct (id,bytes) ->
+        | Correct (x) ->
+          let id, bytes = x in
           lemma_repr_bytes_values (length id);
           if length bytes >= 4 then
             let ot, bytes = split bytes 4ul in
@@ -261,7 +269,8 @@ let rec parseAlpn_aux (al:alpn) (b:bytes) : Tot (result alpn) (decreases (length
   else
     if List.Tot.length al < 255 then
       match vlsplit 1 b with
-      | Correct(cur, r) ->
+      | Correct(x) ->
+        let cur, r = x in
         if length cur > 0 then
           begin
           List.Tot.append_length al [cur];
@@ -291,7 +300,6 @@ let parse_uint32 (b:bytes) : result UInt32.t =
 (* PROTOCOL VERSIONS *)
 
 #set-options "--lax"
-// SI: dead code?
 private let protocol_versions_bytes_aux acc v = acc @| TLSConstants.versionBytes_draft v
 
 val protocol_versions_bytes: protocol_versions -> b:bytes {length b <= 255}
@@ -367,9 +375,11 @@ private let rec parseServerName_aux
       let ty,v = split b 1ul in
       begin
       match vlsplit 2 v with
-      | Error(x,y) ->
+      | Error(q) ->
+          let x, y = q in
 	      ExFail(x, "Failed to parse SNI length: "^ (FStar.Bytes.print_bytes b))
-      | Correct(cur, next) ->
+      | Correct(x) ->
+        let cur, next = x in
       	begin
       	match parseServerName_aux next with
       	| ExFail(x,y) -> ExFail(x,y)
@@ -618,9 +628,9 @@ let extensionBytes_is_injective
     let n2 = CommonDH.namedGroupsBytes l2 in
     assume (repr_bytes (length n1) <= 2);
     assume (repr_bytes (length n2) <= 2);
-    lemma_vlbytes_inj_strong 2 n1 s1 n2 s2
-    //;
-    //namedGroupsBytes_is_injective l1 empty_bytes l2 empty_bytes
+    lemma_vlbytes_inj_strong 2 n1 s1 n2 s2;
+    // namedGroupsBytes_is_injective l1 empty_bytes l2 empty_bytes
+    admit() // cwinter: not needed with the new parsers
   | E_signature_algorithms sha1 ->
     let (E_signature_algorithms sha2) = ext2 in
     let sg1 = signatureSchemeListBytes sha1 in
@@ -628,15 +638,16 @@ let extensionBytes_is_injective
     assume (repr_bytes (length sg1) <= 2);
     assume (repr_bytes (length sg2) <= 2);
     lemma_vlbytes_inj_strong 2 sg1 s1 sg2 s2;
-    signatureSchemeListBytes_is_injective sha1 empty_bytes sha2 empty_bytes
+    // signatureSchemeListBytes_is_injective sha1 empty_bytes sha2 empty_bytes
+    admit() // cwinter: not needed with the new parsers
   | E_signature_algorithms_cert sha1 -> // duplicating the proof above
     let (E_signature_algorithms sha2) = ext2 in
     let sg1 = signatureSchemeListBytes sha1 in
     let sg2 = signatureSchemeListBytes sha2 in
     assume (repr_bytes (length sg1) <= 2);
     assume (repr_bytes (length sg2) <= 2);
-    lemma_vlbytes_inj_strong 2 sg1 s1 sg2 s2;
-    signatureSchemeListBytes_is_injective sha1 empty_bytes sha2 empty_bytes
+    lemma_vlbytes_inj_strong 2 sg1 s1 sg2 s2
+    //;signatureSchemeListBytes_is_injective sha1 empty_bytes sha2 empty_bytes
   | E_extended_ms ->
     lemma_repr_bytes_values (length empty_bytes);
     lemma_vlbytes_inj_strong 2 empty_bytes s1 empty_bytes s2
@@ -1049,7 +1060,7 @@ private let allow_resumption ((_,x):PSK.pskid * pskInfo) =
 private let send_supported_groups cs = isDHECipherSuite cs || CipherSuite13? cs
 private let compute_binder_len (ctr:nat) (pski:pskInfo) =
   let h = PSK.pskInfo_hash pski in
-  ctr + 1 + Hashing.Spec.tagLen h
+  ctr + 1 + (UInt32.v (Hashing.Spec.tagLen h))
 
 private val obfuscate_age: UInt32.t -> list (PSK.pskid * pskInfo) -> list pskIdentity
 let rec obfuscate_age now = function
@@ -1229,7 +1240,9 @@ let serverToNegotiatedExtension cfg cExtL cs ri resuming res sExt =
   match res with
   | Error z -> Error z
   | Correct pv0 ->
-    if not (TLSConstants.exists_b_aux sExt sameExt cExtL) then
+    let exists_b_aux (#a:Type) (#b:Type) (env:b) (f:b -> a -> Tot bool) (l:list a) =
+      Some? (List.Helpers.find_aux env f l) in
+    if not (List.Helpers.exists_b_aux sExt sameExt cExtL) then
       Error(AD_unsupported_extension, perror __SOURCE_FILE__ __LINE__ "server sent an unexpected extension")
     else match sExt with
     (*
@@ -1311,7 +1324,7 @@ let clientToServerExtension pv cfg cs ri pski ks resuming cext =
     (match cfg.alpn with
     | None -> None
     | Some sal ->
-      let common = TLSConstants.filter_aux sal TLSConstants.mem_rev cal in
+      let common = List.Helpers.filter_aux sal List.Helpers.mem_rev cal in
       match common with
       | a :: _ -> Some (E_alpn [a])
       | _ -> None)
@@ -1378,7 +1391,7 @@ let negotiateServerExtensions pv cExtL csl cfg cs ri pski ks resuming =
 
 // https://tools.ietf.org/html/rfc5246#section-7.4.1.4.1
 private val default_signatureScheme_fromSig: protocolVersion -> sigAlg ->
-  ML (l:list signatureScheme{List.Tot.length l == 1})
+  HyperStack.All.ML (l:list signatureScheme{List.Tot.length l == 1})
 let default_signatureScheme_fromSig pv sigAlg =
   let open CoreCrypto in
   let open Hashing.Spec in

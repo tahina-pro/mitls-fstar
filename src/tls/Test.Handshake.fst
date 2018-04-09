@@ -165,7 +165,7 @@ private let recvEncHSRecord tcp (recv: record_t) pv kex rd =
   IO.print_string ("Received HS(" ^ (string_of_handshakeMessage hs_msg) ^ ")\n");
   let logged = handshakeMessageBytes (Some pv) hs_msg in
   IO.print_string ("Logged message = Parsed message? ");
-  if (Platform.Bytes.equalBytes logged to_log) then IO.print_string "yes\n"
+  if (FStar.Bytes.equalBytes logged to_log) then IO.print_string "yes\n"
   else IO.print_string "no\n";
   hs_msg, to_log
 
@@ -268,7 +268,7 @@ private let rec server_loop_12 config sock : ML unit =
     | _ -> failwith "Bad CKE type"
     end
   in
-  IO.print_string ("Client key share:" ^ (Platform.Bytes.print_bytes gx) ^ "\n");
+  IO.print_string ("Client key share:" ^ (FStar.Bytes.print_bytes gx) ^ "\n");
 
   // Derive keys
   let _ = log @@ ClientKeyExchange(cke) in
@@ -357,7 +357,7 @@ let client_12 config host port : ML unit =
   sendHSRecord tcp pv ckeb;
 
   if ems then IO.print_string " ***** USING EXTENDED MASTER SECRET ***** \n";
-  //IO.print_string ("master secret:"^(Platform.Bytes.print_bytes ms)^"\n");
+  //IO.print_string ("master secret:"^(FStar.Bytes.print_bytes ms)^"\n");
 
   // Derive keys
   let KeySchedule.StAEInstance rd wr = KeySchedule.ks_12_get_keys ks in
@@ -374,7 +374,7 @@ let client_12 config host port : ML unit =
   let Correct svd = Handshake.processServerFinished ks log (Finished sfin, sfinb) in
 
   IO.print_string ("Recd fin = expected fin? ");
-  if (Platform.Bytes.equalBytes sfin.fin_vd svd) then IO.print_string "yes\n" else IO.print_string "no\n";
+  if (FStar.Bytes.equalBytes sfin.fin_vd svd) then IO.print_string "yes\n" else IO.print_string "no\n";
 
   // Send request
   let payload = "GET / HTTP/1.1\r\nHost: " ^ host ^ "\r\n\r\n" in
@@ -422,14 +422,14 @@ let client_13 config host port : ML unit =
       "OK" else "FAIL")^"\n");
 
   let hL = Hashing.Spec.tagLen h in
-  let zeroes = Platform.Bytes.abytes (String.make hL (Char.char_of_int 0)) in
+  let zeroes = FStar.Bytes.abytes (String.make hL (Char.char_of_int 0)) in
   let rc = Hashing.compute h zeroes in
   let cv_log = (HandshakeLog.getHash lg h) @| rc in
 
   let CertificateVerify(cv),_ = recvEncHSRecord tcp recv pv kex rd in
   let _ = lg @@ CertificateVerify(cv) in
 
-  //let _ = IO.debug_print_string("cv_sig = " ^ (Platform.Bytes.print_bytes cv.cv_sig) ^ "\n") in
+  //let _ = IO.debug_print_string("cv_sig = " ^ (FStar.Bytes.print_bytes cv.cv_sig) ^ "\n") in
   let Some ((sa,h), sigv) = Handshake.sigHashAlg_of_ske cv.cv_sig in
   let a = Signature.Use (fun _ -> true) sa [h] false false in
   let tbs = Handshake.to_be_signed pv Server None cv_log in
@@ -511,7 +511,7 @@ private let rec server_loop_13 config sock : ML unit =
   let _ = lg @@ (Certificate crt) in
 
   let hL = Hashing.Spec.tagLen h in
-  let zeroes = Platform.Bytes.abytes (String.make hL (Char.char_of_int 0)) in
+  let zeroes = FStar.Bytes.abytes (String.make hL (Char.char_of_int 0)) in
   let rc = Hashing.compute h zeroes in
   let cv_log = (HandshakeLog.getHash lg h) @| rc in
 

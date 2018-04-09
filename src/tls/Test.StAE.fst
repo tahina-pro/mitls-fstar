@@ -15,22 +15,6 @@ module DH = CommonDH
 
 open FStar.HyperStack
 open FStar.HyperStack.ST
-(*
-open FStar.Heap
-open FStar.HyperHeap
-open FStar.IO
-
-open Platform.Bytes
-
-open TLSError
-open TLSInfo
-open TLSConstants
-open Range
-open StatefulPlain
-open AEAD_GCM
-open StatefulLHAE
-open StAE
-*)
 
 let prefix = "Test.StAE"
 let ok: ref bool = ralloc root true

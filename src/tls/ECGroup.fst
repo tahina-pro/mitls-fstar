@@ -3,13 +3,13 @@ module HS = FStar.HyperStack //Added automatically
 
 // cwinter: this file will likely be removed.
 
-open FStar.HyperStack
 open FStar.Bytes
 open FStar.Error
+
 open CoreCrypto
 open TLSError
+open Mem
 open Parse
-open FStar.HyperStack.ST
 
 module CC = CoreCrypto
 module LP = LowParse.SLow
@@ -174,7 +174,7 @@ let parse_point g b =
   | _ ->
       let open Format.UncompressedPointRepresentation in
       let (bl:UInt32.t) =  UInt32.uint_to_t (op_Multiply 2 (ec_bytelen g)) in
-      match (uncompressedPointRepresentation_parser32 (UInt32.v bl)) b with
+      match (uncompressedPointRepresentation_parser32 bl) b with
       | Some (ucpr, _) -> 
           let e = { ecx = ucpr.x; ecy = ucpr.y } in
           if CoreCrypto.ec_is_on_curve (params_of_group g false) e then
@@ -196,7 +196,8 @@ let parse_partial payload =
       | Some(ecp) ->
         match vlsplit 1 point with
         | Error(z) -> Error(z)
-        | Correct(rawpoint, rem) ->
+        | Correct(x) ->
+           let rawpoint, rem = x in
            match parse_point ecp rawpoint with
            | None -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ ("Invalid EC point received:"^(FStar.Bytes.print_bytes rawpoint)))
            | Some p -> Correct ((| ecp, p |),rem)
@@ -219,8 +220,8 @@ let serialize_point #g s =
   | _ ->
     let S_CC e = s in
     let open Format.UncompressedPointRepresentation in
-    let l = length e.ecx in
-    assert (length e.ecx = length e.ecy);
+    let l = len e.ecx in
+    assert (len e.ecx = len e.ecy);
     let ucp = { legacy_form = 4uy; x = e.ecx; y = e.ecy} in
     let x = (uncompressedPointRepresentation_serializer32 l) ucp in
     assert (length x = ec_bytelen g);

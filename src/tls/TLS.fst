@@ -1,28 +1,31 @@
 module TLS
 module HS = FStar.HyperStack //Added automatically
-open FStar.String
-open FStar.Heap
 
-open FStar.HyperStack
 open FStar.Seq
 open FStar.Set
-
 open FStar.Bytes
 open FStar.Error
 
+open Mem
 open TLSError
 open TLSConstants
 open TLSInfo
 
-open Range
+
 module Range = Range
+let range = Range.range
+let point = Range.point
+let frange = Range.frange
+let valid_clen = Range.valid_clen
+let fragment_range = Range.fragment_range
+
 //open Negotiation
 open Epochs
 //open Handshake
 open Connection
 
-
 module ST   = FStar.HyperStack.ST
+module HST  = FStar.HyperStack
 module MS   = FStar.Monotonic.Seq
 module DS   = DataStream
 module SD   = StreamDeltas
@@ -394,8 +397,8 @@ let sendFragment_inv (#c:connection) (#i:id) (wo:option(cwriter i c)) h =
      st_inv c h
   /\ (match wo with
      | None    -> PlaintextID? i
-     | Some wr ->  HS.live_region h (StAE.region wr)
-	        /\ HS.live_region h (StAE.log_region wr))
+     | Some wr ->  live_region h (StAE.region wr)
+	        /\ live_region h (StAE.log_region wr))
 
 #set-options "--initial_fuel 0 --initial_ifuel 1 --max_fuel 0 --max_ifuel 1"
 
@@ -559,7 +562,8 @@ let sendHandshake_post (#c:connection) (#i:id) (wopt:option (cwriter i c))
 		       then frags1==snoc frags0' (Content.CT_CCS #i (point 1))
 		       else frags1==frags0')))))
 
-#reset-options "--z3rlimit 100 --initial_fuel 0 --max_fuel 0 --initial_ifuel 1 --max_ifuel 1 --using_facts_from 'FStar Prims Range Parse Connection Handshake TLS TLSError TLSConstants'"
+#reset-options "--using_facts_from FStar --using_facts_from Prims --using_facts_from Range --using_facts_from Parse --using_facts_from Connection --using_facts_from Handshake --using_facts_from TLS --using_facts_from TLSError --using_facts_from TLSConstants --using_facts_from 'FStar Prims Range Parse Connection Handshake TLS TLSError TLSConstants'"
+#set-options "--z3rlimit 100 --initial_fuel 0 --max_fuel 0 --initial_ifuel 1 --max_ifuel 1"
 
 private let sendHandshake
   (#c:connection)
