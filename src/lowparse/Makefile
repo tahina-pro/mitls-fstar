@@ -53,3 +53,6 @@ example/LowParseExample.c: LowParseExample.fst.checked
 
 example2/LowParseExample2.c: LowParseExample2.fst.checked
 	$(KREMLIN_HOME)/krml -skip-linking -tmpdir example2 -bundle 'LowParse.\*' -drop 'FStar.Tactics.*' -drop 'FStar.Reflection.*' LowParseExample2.fst
+
+# FIXME: update resource usage in FStar.Math.Lemmas
+$(FSTAR_HOME)/ulib/FStar.Math.Lemmas.fst.checked: FSTAR_OPTIONS+=--z3rlimit_factor 4
