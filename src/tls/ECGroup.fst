@@ -111,14 +111,14 @@ let parse_curve b =
     let open Format.ECCurveType in  
     let open Format.NamedGroup in
     match ecCurveType_parser32 b with // <- parse_curve == ecCurveType_parser and-then named_group_parser
-    | Some (Format.ECCurveType.NAMED_CURVE, _) -> 
+    | Correct (Format.ECCurveType.NAMED_CURVE, _) -> 
       let ty, id = split b 1ul in
       match namedGroup_parser32 id with
-      | Some (SECP256R1, _) -> Some CC.ECC_P256
-      | Some (SECP384R1, _) -> Some CC.ECC_P384
-      | Some (SECP521R1, _) -> Some CC.ECC_P521
-      | Some (X25519, _   ) -> Some CC.ECC_X25519
-      | Some (X448, _     ) -> Some CC.ECC_X448
+      | Correct (SECP256R1, _) -> Some CC.ECC_P256
+      | Correct (SECP384R1, _) -> Some CC.ECC_P384
+      | Correct (SECP521R1, _) -> Some CC.ECC_P521
+      | Correct (X25519, _   ) -> Some CC.ECC_X25519
+      | Correct (X448, _     ) -> Some CC.ECC_X448
       | _                   -> None
     | _ -> None)
 #reset-options
@@ -144,18 +144,18 @@ let parse_point g b =
   | ECC_X448 -> (
       let (p:LP.parser32 _) = LP.parse32_flbytes 56 56ul in
       match p b with
-      | Some (bs, _) -> Some (S_X448 bs)
+      | Correct (bs, _) -> Some (S_X448 bs)
       | _ -> None)
   | ECC_X25519 -> (
       let (p:LP.parser32 _) = LP.parse32_flbytes 32 32ul in
       match p b with
-      | Some (bs, _) -> Some (S_X25519 bs)
+      | Correct (bs, _) -> Some (S_X25519 bs)
       | _ -> None)
   | _ ->
       let open Format.UncompressedPointRepresentation in
       let cl = UInt32.uint_to_t (ec_bytelen g) in
       match (uncompressedPointRepresentation_parser32 cl) b with
-      | Some (ucpr, _) -> 
+      | Correct (ucpr, _) -> 
           let e = { ecx = ucpr.x; ecy = ucpr.y } in
           if CoreCrypto.ec_is_on_curve (params_of_group g false) e then
             Some (S_CC e)

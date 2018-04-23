@@ -240,7 +240,7 @@ let lemma_dh_param_len_bound (bs:vlb16)
 val parse_partial: FStar.Bytes.bytes -> Tot (result ((g:group & share g) * bytes))
 let parse_partial bs =
   match dhparam_parser32 bs with 
-  | Some ((p, g, gy, rem), _) -> 
+  | Correct ((p, g, gy, rem), _) -> 
       // cwinter: I have no idea why these lemmas are needed, this should really be automatic.
       lemma_dh_param_len_bound p;
       lemma_dh_param_len_bound g;
@@ -250,5 +250,5 @@ let parse_partial bs =
       ) 
       else
         Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
-  | _ -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "")
+  | Error e -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ e)
 #reset-options

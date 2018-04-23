@@ -57,8 +57,8 @@ let wrap_parser32_constant_length
 : Tot (pinverse_t (wrap_serializer32_constant_length s32 len u))
 = fun (x: lbytes len) ->
   match p32 x with
-  | Some (y, _) -> Correct y
-  | _ -> Error (AD_decode_error, msg)
+  | Correct (y, _) -> Correct y
+  | Error e -> Error (AD_decode_error, msg ^ e)
 
 let bytes_equal_intro
   (b1 b2: bytes)
@@ -80,9 +80,9 @@ let lemma_pinverse_serializer32_parser32_constant_length
   (x: lbytes len)
 : Lemma
   (lemma_pinverse_f_g #t #(lbytes len) equal (wrap_serializer32_constant_length s32 len u) (wrap_parser32_constant_length s32 len u p32 msg) x)
-= if (Some? (p32 x))
+= if (Correct? (p32 x))
   then begin
-    let (Some (y, consumed)) = p32 x in
+    let (Correct (y, consumed)) = p32 x in
     parser32_then_serializer32' p32 s32 x y consumed
   end else ()
 
@@ -109,10 +109,10 @@ let wrap_parser32
   (p32: parser32 p)
   (msg: string)
   (x: bytes32)
-: Tot (result t)
+: Tot (TLSError.result t)
 = match p32 x with
-  | Some (y, _) -> Correct y
-  | _ -> Error (AD_decode_error, msg)
+  | Correct (y, _) -> Correct y
+  | Error e -> Error (AD_decode_error, msg ^ e)
 
 inline_for_extraction
 let wrap_serializer32

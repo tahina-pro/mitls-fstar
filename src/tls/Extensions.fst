@@ -943,8 +943,8 @@ let parseExtension mt b =
       if length data < 2 || length data >= 65538 then error "supported groups" else
       mapResult (normallyNone E_supported_groups) (
         match (CommonDH.parseNamedGroups data) with 
-        | Some (x, _) -> Correct x 
-        | _ -> error "supported_groups parser error")
+        | Correct (x, _) -> Correct x 
+        | Error e -> error ("supported_groups parser error: " ^ e))
 
     | (0x00z, 13z) -> // sigAlgs
       if length data < 2 || length data >= 65538 then error "supported signature algorithms" else

@@ -671,7 +671,7 @@ let parseKeyShareEntry b =
   let open Format.NamedGroup in
   let prsr = keyShareEntry_parser32 in
   match prsr b with
-  | Some (x, _) ->
+  | Correct (x, _) ->
     assert (Some? (group_of_namedGroup x.group));
     let Some og = group_of_namedGroup x.group in
     if is_ffdhe x.group then
@@ -686,7 +686,7 @@ let parseKeyShareEntry b =
       Correct (Share og ps)
     else
       Correct (UnknownShare x.group x.key_exchange)
-  | _ -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "Failed to parse key share entry")
+  | Error e -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ ("Failed to parse key share entry: " ^ e))
   
 
 // Choice: truncate when maximum length is exceeded
@@ -756,8 +756,8 @@ let helloRetryKeyShareBytes (k:keyShare): Tot (b:bytes) =
   
 let parseHelloRetryKeyShare (bs:bytes): Tot (result keyShare) =
   match namedGroup_parser32 bs with 
-  | Some (ng, _) -> Correct (HRRKeyShare ng)
-  | _ -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ "Failed to parse hello retry group")
+  | Correct (ng, _) -> Correct (HRRKeyShare ng)
+  | Error e -> Error(AD_decode_error, perror __SOURCE_FILE__ __LINE__ ("Failed to parse hello retry group: " ^ e))
 
 
 (** Serializing function for a KeyShare *)
