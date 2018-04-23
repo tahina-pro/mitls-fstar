@@ -1,4 +1,5 @@
 module LowParse.SLow.Sum
+open FStar.Error // for Correct, Error
 include LowParse.Spec.Sum
 include LowParse.SLow.Enum
 
@@ -173,22 +174,22 @@ let parse32_sum_gen'
   (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
   (pc32: ((x: sum_key t) -> Tot (parser32 (pc x))))
   (p32: parser32 (parse_enum_key p (sum_enum t)))
-  (destr: enum_destr_t (bytes32 -> Tot (option (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(option (sum_type t * U32.t)))) (sum_enum t))
+  (destr: enum_destr_t (bytes32 -> Tot (result (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(result (sum_type t * U32.t)))) (sum_enum t))
 : Tot (parser32 (parse_sum t p pc))
 = fun (input: bytes32) -> ((
     match p32 input with
-    | Some (tg, consumed_tg) ->
+    | Correct (tg, consumed_tg) ->
       let input' = B32.b32slice input consumed_tg (B32.len input) in
-      begin match destr (fun (x: sum_key t) (input: bytes32) -> match pc32 x input with | Some (d, consumed_d) -> Some ((d <: sum_type t), consumed_d) | _ -> None) tg input' with
-      | Some (d, consumed_d) ->
+      begin match destr (fun (x: sum_key t) (input: bytes32) -> match pc32 x input with | Correct (d, consumed_d) -> Correct ((d <: sum_type t), consumed_d) | Error e -> Error e) tg input' with
+      | Correct (d, consumed_d) ->
         // FIXME: implicit arguments are not inferred because (synth_tagged_union_data ...) is Tot instead of GTot
         assert (parse (parse_synth #_ #_ #(sum_type t) (pc tg) (synth_tagged_union_data (sum_tag_of_data t) tg)) (B32.reveal input') == Some (d, U32.v consumed_d));
-        Some (d, U32.add consumed_tg consumed_d)
-      | _ -> None
+        Correct (d, U32.add consumed_tg consumed_d)
+      | Error e -> Error ("parse32_sum_gen' sum payload: " ^ e)
       end
-    | _ -> None
+    | Error e -> Error ("parse32_sum_gen' enum value: " ^ e)
   )
-  <: (res: option (sum_type t * U32.t) { parser32_correct (parse_sum t p pc) input res } )
+  <: (res: result (sum_type t * U32.t) { parser32_correct (parse_sum t p pc) input res } )
   )
 
 #reset-options
@@ -282,27 +283,27 @@ let parse32_sum_with_nondep_aux
   (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
   (pc32: ((x: sum_key t) -> Tot (parser32 (pc x))))
   (p32: parser32 (parse_enum_key p (sum_enum t)))
-  (destr: enum_destr_t (bytes32 -> Tot (option (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(option (sum_type t * U32.t)))) (sum_enum t))
+  (destr: enum_destr_t (bytes32 -> Tot (result (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(result (sum_type t * U32.t)))) (sum_enum t))
   (input: bytes32)
-: Tot (option ((nondep_t * sum_type t) * U32.t))
+: Tot (result ((nondep_t * sum_type t) * U32.t))
 = match p32 input with
-  | Some (tg, consumed_tg) ->
+  | Correct (tg, consumed_tg) ->
     let input1 = B32.b32slice input consumed_tg (B32.len input) in
     begin match pnd32 input1 with
-    | Some (nd, consumed_nd) ->
+    | Correct (nd, consumed_nd) ->
       let input2 = B32.b32slice input1 consumed_nd (B32.len input1) in
       begin match 
-        destr (fun (x: sum_key t) (input: bytes32) -> match pc32 x input with | Some (d, consumed_d) -> Some ((d <: sum_type t), consumed_d) | _ -> None) tg input2
+        destr (fun (x: sum_key t) (input: bytes32) -> match pc32 x input with | Correct (d, consumed_d) -> Correct ((d <: sum_type t), consumed_d) | Error e -> Error e) tg input2
       with
-      | Some (d, consumed_d) ->
+      | Correct (d, consumed_d) ->
         [@inline_let]
-        let _ = assert (U32.v consumed_tg + (U32.v consumed_nd + U32.v consumed_d) < 4294967296) in
-        Some ((nd, d), U32.add consumed_tg (U32.add consumed_nd consumed_d))
-      | _ -> None
+        let _ = assert_spinoff (U32.v consumed_tg + (U32.v consumed_nd + U32.v consumed_d) < 4294967296) in
+        Correct ((nd, d), U32.add consumed_tg (U32.add consumed_nd consumed_d))
+      | Error e -> Error ("parse32_sum_with_nondep_aux sum dep: " ^ e)
     end
-    | _ -> None
+    | Error e -> Error ("parse32_sum_with_nondep_aux sum nondep: " ^ e)
     end
-  | _ -> None
+  | Error e -> Error ("parse32_sum_with_nondep_aux enum value: " ^ e)
 
 inline_for_extraction
 let parse32_sum_with_nondep_aux_correct
@@ -317,15 +318,15 @@ let parse32_sum_with_nondep_aux_correct
   (#pc: ((x: sum_key t) -> Tot (parser k (sum_cases t x))))
   (pc32: ((x: sum_key t) -> Tot (parser32 (pc x))))
   (p32: parser32 (parse_enum_key p (sum_enum t)))
-  (destr: enum_destr_t (bytes32 -> Tot (option (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(option (sum_type t * U32.t)))) (sum_enum t))
+  (destr: enum_destr_t (bytes32 -> Tot (result (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(result (sum_type t * U32.t)))) (sum_enum t))
   (input: bytes32)
 : Lemma
   (parser32_correct (parse_sum_with_nondep t p pnd pc) input (parse32_sum_with_nondep_aux t p pnd32 pc32 p32 destr input))
 = let res = parse32_sum_with_nondep_aux t p pnd32 pc32 p32 destr input in
   let gp = parse_sum_with_nondep_aux t p pnd pc (B32.reveal input) in
   assert (match res with
-  | None -> gp == None
-  | Some (hres, consumed) ->
+  | Error _ -> gp == None
+  | Correct (hres, consumed) ->
     Some? gp /\ (
     let (Some (hres', consumed')) = gp in
     hres == hres' /\
@@ -352,7 +353,7 @@ let parse32_sum_gen
     p' == parse_sum t p pc
   })
   (p32: parser32 (parse_enum_key p (sum_enum t)))
-  (destr: enum_destr_t (bytes32 -> Tot (option (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(option (sum_type t * U32.t)))) (sum_enum t))
+  (destr: enum_destr_t (bytes32 -> Tot (result (sum_type t * U32.t))) (feq bytes32 _ (eq2 #(result (sum_type t * U32.t)))) (sum_enum t))
 : Tot (parser32 p')
 = parse32_sum_gen' t p pc32 p32 destr
 

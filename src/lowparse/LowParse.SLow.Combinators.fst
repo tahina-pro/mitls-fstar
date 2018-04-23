@@ -1,4 +1,5 @@
 module LowParse.SLow.Combinators
+open FStar.Error // for Correct, Error
 include LowParse.SLow.Base
 include LowParse.Spec.Combinators
 
@@ -12,7 +13,7 @@ let parse32_ret
   (#t: Type)
   (x: t)
 : Tot (parser32 (parse_ret x))
-= (fun input -> ((Some (x, 0ul)) <: (res: option (t * U32.t) { parser32_correct (parse_ret x) input res } )))
+= (fun input -> ((Correct (x, 0ul)) <: (res: result (t * U32.t) { parser32_correct (parse_ret x) input res } )))
 
 inline_for_extraction
 let parse32_and_then
@@ -28,15 +29,15 @@ let parse32_and_then
 : Tot (parser32 (p `and_then` p'))
 = fun (input: bytes32) ->
   ((match p32 input with
-  | Some (v, l) ->
+  | Correct (v, l) ->
     let input' = B32.slice input l (B32.len input) in
     begin match p32' v input' with
-    | Some (v', l') ->
-      Some (v', U32.add l l')
-    | _ -> None
+    | Correct (v', l') ->
+      Correct (v', U32.add l l')
+    | Error e -> Error ("parse32_and_then rhs: " ^ e)
     end
-  | _ -> None
-  ) <: (res: option (t' * U32.t) { parser32_correct (p `and_then` p') input res } ))
+  | Error e -> Error ("parse32_and_then lhs: " ^ e)
+  ) <: (res: result (t' * U32.t) { parser32_correct (p `and_then` p') input res } ))
 
 inline_for_extraction
 let parse32_nondep_then
@@ -51,15 +52,15 @@ let parse32_nondep_then
 : Tot (parser32 (nondep_then p1 p2))
 = fun (input: bytes32) ->
   ((match p1' input with
-  | Some (v, l) ->
+  | Correct (v, l) ->
     let input' = B32.slice input l (B32.len input) in
     begin match p2' input' with
-    | Some (v', l') ->
-      Some ((v, v'), U32.add l l')
-    | _ -> None
+    | Correct (v', l') ->
+      Correct ((v, v'), U32.add l l')
+    | Error e -> Error ("parse32_nondep_then rhs: " ^ e)
     end
-  | _ -> None
-  ) <: (res: option ((t1 * t2) * U32.t) { parser32_correct (p1 `nondep_then` p2) input res } ))
+  | Error e -> Error ("parse32_nondep_then lhs: " ^ e)
+  ) <: (res: result ((t1 * t2) * U32.t) { parser32_correct (p1 `nondep_then` p2) input res } ))
 
 let serialize32_kind_precond
   (k1 k2: parser_kind)
@@ -104,14 +105,14 @@ let parse32_strengthen
 : Tot (parser32 (parse_strengthen p1 p2 prf))
 = fun (xbytes: bytes32) -> ((
   match p1' xbytes with
-  | Some (x, consumed) ->
+  | Correct (x, consumed) ->
     [@inline_let]
     let _ = prf (B32.reveal xbytes) (U32.v consumed) x in
     [@inline_let]
     let (x' : t1 { p2 x' } ) = x in
-    Some (x', consumed)
-  | _ -> None
-  ) <: (res: option ((x: t1 { p2 x}) * U32.t) { parser32_correct (parse_strengthen p1 p2 prf) xbytes res } ))
+    Correct (x', consumed)
+  | Error e -> Error ("parse32_strengthen: " ^ e)
+  ) <: (res: result ((x: t1 { p2 x}) * U32.t) { parser32_correct (parse_strengthen p1 p2 prf) xbytes res } ))
 
 inline_for_extraction
 let parse32_synth
@@ -129,9 +130,9 @@ let parse32_synth
 = fun (input: bytes32) ->
   ((
     match p1' input with
-    | Some (v1, consumed) -> Some (f2' v1, consumed)
-    | _ -> None
-   ) <: (res: option (t2 * U32.t) { parser32_correct (parse_synth p1 f2) input res } ))
+    | Correct (v1, consumed) -> Correct (f2' v1, consumed)
+    | Error e -> Error ("parse32_synth: " ^ e)
+   ) <: (res: result (t2 * U32.t) { parser32_correct (parse_synth p1 f2) input res } ))
 
 inline_for_extraction
 let serialize32_synth
@@ -165,16 +166,16 @@ let parse32_filter
 = fun (input: bytes32) ->
   ((
     match p32 input with
-    | Some (v, consumed) ->
+    | Correct (v, consumed) ->
       if g v
       then
         [@inline_let]
         let (v' : t { f v' == true } ) = v in
-	Some (v', consumed)
+	Correct (v', consumed)
       else
-        None
-    | _ -> None
-  ) <: (res: option ((v': t { f v' == true } ) * U32.t) { parser32_correct (parse_filter p f) input res } ))
+        Error "parse_filter assertion failed"
+    | Error e -> Error ("parse_filter payload: " ^ e)
+  ) <: (res: result ((v': t { f v' == true } ) * U32.t) { parser32_correct (parse_filter p f) input res } ))
 
 inline_for_extraction
 let serialize32_filter
@@ -200,14 +201,14 @@ let make_constant_size_parser32
 : Tot (parser32 (make_constant_size_parser sz t f))
 = fun (input: bytes32) -> ((
     if U32.lt (B32.len input) sz'
-    then None
+    then Error ("make_constant_size_parser32 not enough data, expected " ^ string_of_int sz ^ ", got " ^ string_of_int (U32.v (B32.len input)))
     else begin
       let s' = B32.slice input 0ul sz' in
       match f' s' with
-      | None -> None
-      | Some v -> Some (v, sz')
+      | None -> Error "make_constant_size_parser32 payload"
+      | Some v -> Correct (v, sz')
     end
-  ) <: (res: option (t * U32.t) { parser32_correct (make_constant_size_parser sz t f) input res } ))
+  ) <: (res: result (t * U32.t) { parser32_correct (make_constant_size_parser sz t f) input res } ))
 
 inline_for_extraction
 let make_total_constant_size_parser32
@@ -222,11 +223,11 @@ let make_total_constant_size_parser32
 : Tot (parser32 (make_total_constant_size_parser sz t f))
 = fun (input: bytes32) -> ((
     if U32.lt (B32.len input) sz'
-    then None
+    then Error ("make_total_constant_size_parser32 not enough data, expected " ^ string_of_int sz ^ ", got " ^ string_of_int (U32.v (B32.len input)))
     else
       let s' = B32.slice input 0ul sz' in
-      Some (f' s', sz')
-  ) <: (res: option (t * U32.t) { parser32_correct (make_total_constant_size_parser sz t f) input res } ))
+      Correct (f' s', sz')
+  ) <: (res: result (t * U32.t) { parser32_correct (make_total_constant_size_parser sz t f) input res } ))
 
 inline_for_extraction
 let size32_nondep_then

@@ -1,4 +1,5 @@
 module LowParse.SLow.FLData
+open FStar.Error // for Correct, Error
 include LowParse.Spec.FLData
 include LowParse.SLow.Combinators
 
@@ -17,16 +18,16 @@ let parse32_fldata
 = (fun (input: bytes32) -> ((
     if U32.lt (B32.len input) sz32
     then
-      None
+      Error ("parse32_fldata not enough incoming data, expected " ^ string_of_int sz ^ ", got " ^ string_of_int (U32.v (B32.len input)))
     else
       match p32 (B32.b32slice input 0ul sz32) with
-      | Some (v, consumed) ->
+      | Correct (v, consumed) ->
 	if consumed = sz32
 	then begin
-	  Some (v, consumed)
-	end else None
-      | None -> None
-  ) <: (res: option (t * U32.t) { parser32_correct (parse_fldata p sz) input res } )))
+	  Correct (v, consumed)
+	end else Error ("parse32_fldata not enough data consumed by payload parser, expected " ^ string_of_int sz ^ ", got " ^ string_of_int (U32.v consumed))
+      | Error e -> Error ("parse32_fldata payload: " ^ e)
+  ) <: (res: result (t * U32.t) { parser32_correct (parse_fldata p sz) input res } )))
 
 inline_for_extraction
 let parse32_fldata_strong
@@ -40,15 +41,15 @@ let parse32_fldata_strong
 : Tot (parser32 (parse_fldata_strong s sz))
 = (fun (input: bytes32) -> ((
     match parse32_fldata p32 sz sz32 input with
-    | Some (v, consumed) ->
+    | Correct (v, consumed) ->
       assert (
         parse_fldata_strong_correct s sz (B32.reveal input) (U32.v consumed) v;
         Seq.length (s v) == sz
       );
-      Some ((v <: parse_fldata_strong_t s sz), consumed)
-    | None -> None
+      Correct ((v <: parse_fldata_strong_t s sz), consumed)
+    | Error e -> Error ("parse32_fldata_strong payload: " ^ e)
     )   
-    <: (res: option (parse_fldata_strong_t s sz * U32.t) { parser32_correct (parse_fldata_strong s sz) input res } )))
+    <: (res: result (parse_fldata_strong_t s sz * U32.t) { parser32_correct (parse_fldata_strong s sz) input res } )))
 
 inline_for_extraction
 let serialize32_fldata_strong

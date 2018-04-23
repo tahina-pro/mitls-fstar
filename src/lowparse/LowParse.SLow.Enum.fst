@@ -1,4 +1,5 @@
 module LowParse.SLow.Enum
+open FStar.Error // for Correct, Error
 include LowParse.Spec.Enum
 include LowParse.SLow.Combinators
 
@@ -81,7 +82,7 @@ let parse32_maybe_enum_key_gen
 : Tot (parser32 p')
 = parse32_synth p (maybe_enum_key_of_repr e) f p32 ()
 
-#set-options "--z3rlimit 32 --max_fuel 8 --max_ifuel 8"
+#set-options "--z3rlimit 64 --max_fuel 8 --max_ifuel 8"
 
 inline_for_extraction
 let parse32_enum_key_gen
@@ -99,13 +100,13 @@ let parse32_enum_key_gen
 : Tot (parser32 p')
 = (fun (input: bytes32) -> ((
     match pe input with
-    | Some (k, consumed) ->
+    | Correct (k, consumed) ->
       begin match k with
-      | Known k' -> Some (k', consumed)
-      | _ -> None
+      | Known k' -> Correct (k', consumed)
+      | _ -> Error "parse32_enum_key_gen unknown enum value"
       end
-    | _ -> None
-  ) <: (res: option (enum_key e * U32.t) { parser32_correct (parse_enum_key p e) input res } )))
+    | Error e -> Error ("parse32_enum_key_gen payload: " ^ e)
+  ) <: (res: result (enum_key e * U32.t) { parser32_correct (parse_enum_key p e) input res } )))
 
 #reset-options
 

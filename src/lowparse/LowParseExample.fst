@@ -1,12 +1,12 @@
 module LowParseExample
 
-let f (input: FStar.Bytes.bytes) : Tot (option (LowParseExample.Aux.t * FStar.UInt32.t)) =
+let f (input: FStar.Bytes.bytes) : Tot (LowParse.SLow.result (LowParseExample.Aux.t * FStar.UInt32.t)) =
   LowParseExample.Aux.parse32_t input
 
-let g (input: FStar.Bytes.bytes) : Tot (option (LowParse.SLow.array LowParseExample.Aux.t 18 * FStar.UInt32.t)) =
+let g (input: FStar.Bytes.bytes) : Tot (LowParse.SLow.result (LowParse.SLow.array LowParseExample.Aux.t 18 * FStar.UInt32.t)) =
   LowParseExample.Aux.parse32_t_array input
 
-let j (input: FStar.Bytes.bytes) : Tot (option (LowParse.SLow.vlarray LowParseExample.Aux.t 5 7 * FStar.UInt32.t)) =
+let j (input: FStar.Bytes.bytes) : Tot (LowParse.SLow.result (LowParse.SLow.vlarray LowParseExample.Aux.t 5 7 * FStar.UInt32.t)) =
   LowParseExample.Aux.parse32_t_vlarray input
 
 let m (x: LowParseExample.Aux.t) : Tot FStar.Bytes.bytes =

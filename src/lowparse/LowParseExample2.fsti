@@ -1,4 +1,7 @@
 module LowParseExample2
+open FStar.Error // for Correct, Error
+
+type result a = optResult string a
 
 module B32 = FStar.Bytes
 
@@ -21,7 +24,7 @@ let make_t' (x: list t) : Tot (option t') =
 
 module U32 = FStar.UInt32
 
-val parse_t' : B32.bytes -> Tot (option (t' * U32.t))
+val parse_t' : B32.bytes -> Tot (result (t' * U32.t))
 
 val serialize_t' : t' -> Tot B32.bytes
 
@@ -30,7 +33,7 @@ val serialize_then_parse_t'
 : Lemma
   (
     let b = serialize_t' x in
-    parse_t' b == Some (x, B32.len b)
+    parse_t' b == Correct (x, B32.len b)
   )
 
 val parse_then_serialize_t'
@@ -38,7 +41,7 @@ val parse_then_serialize_t'
   (y: t')
   (consumed: U32.t)
 : Lemma
-  (requires (parse_t' x == Some (y, consumed)))
+  (requires (parse_t' x == Correct (y, consumed)))
   (ensures (
     U32.v consumed <= B32.length x /\
     serialize_t' y == B32.slice x 0ul consumed

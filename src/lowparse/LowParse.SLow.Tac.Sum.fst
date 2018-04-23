@@ -59,12 +59,12 @@ let parse32_sum_tac_ar2
     p' == parse_sum t p pc
   })
 : T.Tac T.term
-= let eq = feq bytes32 (option (sum_type t * U32.t)) (eq2 #_) in
+= let eq = feq bytes32 (result (sum_type t * U32.t)) (eq2 #_) in
   let (eq_refl : unit { r_reflexive _ eq /\ r_transitive _ eq } ) = () in
   let et = quote (sum_enum t) in
   enum_destr_tac'
-      (bytes32 -> Tot (option (sum_type t * U32.t)))
-      (feq bytes32 (option (sum_type t * U32.t)) (eq2 #_))
+      (bytes32 -> Tot (result (sum_type t * U32.t)))
+      (feq bytes32 (result (sum_type t * U32.t)) (eq2 #_))
       (fif _ _ (eq2 #_) (default_if _))
       eq_refl
       (sum_enum t)

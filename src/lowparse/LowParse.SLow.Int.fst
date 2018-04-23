@@ -14,8 +14,8 @@ let parse32_u8 =
     [@inline_let]
     let _ = Unique.parse_u8_unique (B32.reveal input) in
     [@inline_let]
-    let res : option (U8.t * U32.t) = Aux.parse32_u8 input in
-    (res <: (res: option (U8.t * U32.t) { parser32_correct parse_u8 input res } ))
+    let res : result (U8.t * U32.t) = Aux.parse32_u8 input in
+    (res <: (res: result (U8.t * U32.t) { parser32_correct parse_u8 input res } ))
   )
 
 let serialize32_u8
@@ -32,8 +32,8 @@ let parse32_u16 =
     [@inline_let]
     let _ = Unique.parse_u16_unique (B32.reveal input) in
     [@inline_let]
-    let res : option (U16.t * U32.t) = Aux.parse32_u16 input in
-    (res <: (res: option (U16.t * U32.t) { parser32_correct parse_u16 input res } ))
+    let res : result (U16.t * U32.t) = Aux.parse32_u16 input in
+    (res <: (res: result (U16.t * U32.t) { parser32_correct parse_u16 input res } ))
   )
 
 let serialize32_u16
@@ -50,8 +50,8 @@ let parse32_u32 =
     [@inline_let]
     let _ = Unique.parse_u32_unique (B32.reveal input) in
     [@inline_let]
-    let res : option (U32.t * U32.t) = Aux.parse32_u32 input in
-    (res <: (res: option (U32.t * U32.t) { parser32_correct parse_u32 input res } ))
+    let res : result (U32.t * U32.t) = Aux.parse32_u32 input in
+    (res <: (res: result (U32.t * U32.t) { parser32_correct parse_u32 input res } ))
   )
 
 let serialize32_u32

@@ -1,4 +1,5 @@
 module LowParse.SLow.List
+open FStar.Error // for Correct, Error
 include LowParse.Spec.List
 include LowParse.SLow.Combinators
 
@@ -24,8 +25,8 @@ let rec parse_list_tailrec'
     Some (L.rev aux)
   else
     match p32 b with
-    | None -> None
-    | Some (v, n) ->
+    | Error _ -> None
+    | Correct (v, n) ->
       if n = 0ul
       then None (* elements cannot be empty *)
       else
@@ -61,8 +62,8 @@ let rec parse_list_tailrec'_correct'
     L.append_l_nil (L.rev aux)
   else
     match p32 b with
-    | None -> ()
-    | Some (v, n) ->
+    | Error _ -> ()
+    | Correct (v, n) ->
       if n = 0ul
       then ()
       else begin
@@ -101,10 +102,7 @@ let list_rev
   (#t: Type)
   (l: list t)
 : Tot (l' : list t { l' == L.rev l } )
-= match l with
-  | [] -> []
-  | _ ->
-    let (_, l') =
+=   let (_, l') =
       CL.total_while
         (fun (rem, _) -> L.length rem)
         (list_rev_inv l)
@@ -117,6 +115,33 @@ let list_rev
     in
     l'
 
+let list_length_inv
+  (#t: Type)
+  (l: list t)
+  (b: bool)
+  (x: list t * nat)
+: GTot Type0
+= let (rem, acc) = x in
+  L.length l == L.length rem + acc /\
+  (b == false ==> rem == [])
+
+let list_length
+  (#t: Type)
+  (l: list t)
+: Tot (n: nat { n == L.length l } )
+= let (_, l') =
+    CL.total_while
+      (fun (rem, _) -> L.length rem)
+      (list_length_inv l)
+      (fun (rem, acc) ->
+        match rem with
+        | [] -> (false, (rem, acc))
+        | _ :: q -> (true, (q, 1 + acc))
+      )
+      (l, 0)
+  in
+  l'
+  
 let parse_list_tailrec_inv
   (#k: parser_kind)
   (#t: Type0)
@@ -124,22 +149,22 @@ let parse_list_tailrec_inv
   (p32: parser32 p)
   (input: bytes32)
   (b: bool)
-  (x: option (bytes32 * list t))
+  (x: result (bytes32 * list t))
 : GTot Type0
 = match x with
-  | Some (input', accu') ->
+  | Correct (input', accu') ->
     parse_list_tailrec' p32 input [] == parse_list_tailrec' p32 input' accu' /\
     (b == false ==> B32.length input' == 0)
-  | None -> 
+  | Error _ -> 
     b == false /\ None? (parse_list_tailrec' p32 input [])
 
 let parse_list_tailrec_measure
   (#t: Type0)
-  (x: option (bytes32 * list t))
+  (x: result (bytes32 * list t))
 : GTot nat
 = match x with
-  | None -> 0
-  | Some (input', _) -> B32.length input'
+  | Error _ -> 0
+  | Correct (input', _) -> B32.length input'
 
 inline_for_extraction
 let parse_list_tailrec_body
@@ -148,27 +173,27 @@ let parse_list_tailrec_body
   (#p: parser k t)
   (p32: parser32 p)
   (input: bytes32)
-: (x: option (bytes32 * list t)) ->
-  Pure (bool * option (bytes32 * list t))
+: (x: result (bytes32 * list t)) ->
+  Pure (bool * result (bytes32 * list t))
   (requires (parse_list_tailrec_inv p32 input true x))
   (ensures (fun (continue, y) ->
     parse_list_tailrec_inv p32 input continue y /\
     (if continue then parse_list_tailrec_measure y < parse_list_tailrec_measure x else True)
   ))
-= fun (x: option (bytes32 * list t)) ->
-  let (Some (input', accu')) = x in
+= fun (x: result (bytes32 * list t)) ->
+  let (Correct (input', accu')) = x in
   let len = B32.len input' in
   if len = 0ul
   then (false, x)
   else
     match p32 input' with
-    | Some (v, consumed) ->
+    | Correct (v, consumed) ->
       if consumed = 0ul
-      then (false, None)
+      then (false, Error "parse_list element parser consumed nothing")
       else
         let input'' = B32.slice input' consumed len in
-        (true, Some (input'', v :: accu'))
-    | None -> (false, None)
+        (true, Correct (input'', v :: accu'))
+    | Error e -> (false, Error ("parse_list after " ^ string_of_int (list_length accu') ^ " successfully parsed elements, payload failed: " ^ e))
 
 inline_for_extraction
 let parse_list_tailrec
@@ -177,17 +202,23 @@ let parse_list_tailrec
   (#p: parser k t)
   (p32: parser32 p)
   (input: bytes32)
-: Tot (res: option (list t) { res == parse_list_tailrec' p32 input [] } )
+: Tot (res: result (list t) { 
+    let q = parse_list_tailrec' p32 input [] in
+    match res, q with
+    | Correct r, Some r' -> r == r'
+    | Error _, None -> True
+    | _ -> False
+  })
 = let accu =
     CL.total_while
       (parse_list_tailrec_measure #t)
       (parse_list_tailrec_inv p32 input)
       (fun x -> parse_list_tailrec_body p32 input x)
-      (Some (input, []))
+      (Correct (input, []))
   in
   match accu with
-  | None -> None
-  | Some (_, accu') -> Some (list_rev accu')
+  | Error e -> Error e
+  | Correct (_, accu') -> Correct (list_rev accu')
 
 inline_for_extraction
 let parse32_list
@@ -199,11 +230,11 @@ let parse32_list
 = fun (input: bytes32) -> ((
     parse_list_tailrec'_correct p32 input;
     match parse_list_tailrec p32 input with
-    | None -> None
-    | Some res ->
+    | Error e -> Error e
+    | Correct res ->
       parse_list_bare_consumed p (B32.reveal input);
-      Some (res, B32.len input)
-  ) <: (res: option (list t * U32.t) { parser32_correct (parse_list p) input res } ))
+      Correct (res, B32.len input)
+  ) <: (res: result (list t * U32.t) { parser32_correct (parse_list p) input res } ))
 
 let rec partial_serialize32_list'
   (#t: Type0)

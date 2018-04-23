@@ -3,20 +3,24 @@ include LowParse.Spec.Base
 
 module B32 = LowParse.Bytes32
 module U32 = FStar.UInt32
+module ER = FStar.Error
 
 let bytes32 = B32.bytes
+
+inline_for_extraction
+type result (a: Type) = ER.optResult string a
 
 let parser32_correct
   (#k: parser_kind)
   (#t: Type0)
   (p: parser k t)
   (input: bytes32)
-  (res: option (t * U32.t))
+  (res: result (t * U32.t))
 : GTot Type0
 = let gp = parse p (B32.reveal input) in
   match res with
-  | None -> gp == None
-  | Some (hres, consumed) ->
+  | ER.Error _ -> gp == None
+  | ER.Correct (hres, consumed) ->
     Some? gp /\ (
       let (Some (hres' , consumed')) = gp in
       hres == hres' /\
@@ -29,16 +33,16 @@ let parser32
   (#t: Type0)
   (p: parser k t)
 : Tot Type0
-= (input: bytes32) -> Tot (res: option (t * U32.t) { parser32_correct p input res } )
+= (input: bytes32) -> Tot (res: result (t * U32.t) { parser32_correct p input res } )
 
 inline_for_extraction
 let make_parser32
   (#k: parser_kind)
   (#t: Type0)
   (p: parser k t)
-  (p32: (input: bytes32) -> Pure (option (t * U32.t)) (requires True) (ensures (fun res -> parser32_correct p input res)))
+  (p32: (input: bytes32) -> Pure (result (t * U32.t)) (requires True) (ensures (fun res -> parser32_correct p input res)))
 : Tot (parser32 p)
-= (fun (input: bytes32) -> (p32 input <: (res: option (t * U32.t) { parser32_correct p input res } )))
+= (fun (input: bytes32) -> (p32 input <: (res: result (t * U32.t) { parser32_correct p input res } )))
 
 inline_for_extraction
 let coerce_parser32
@@ -111,7 +115,7 @@ let serializer32_then_parser32
   (s32: serializer32 s)
   (input: t)
 : Lemma
-  (p32 (s32 input) == Some (input, B32.len (s32 input)))
+  (p32 (s32 input) == ER.Correct (input, B32.len (s32 input)))
 = ()
 
 let parser32_then_serializer32
@@ -123,9 +127,9 @@ let parser32_then_serializer32
   (s32: serializer32 s)
   (input: bytes32)
 : Lemma
-  (requires (Some? (p32 input)))
+  (requires (ER.Correct? (p32 input)))
   (ensures (
-    let (Some (v, consumed)) = p32 input in
+    let (ER.Correct (v, consumed)) = p32 input in
     U32.v consumed <= B32.length input /\
     s32 v == B32.b32slice input 0ul consumed
   ))
@@ -142,7 +146,7 @@ let parser32_then_serializer32'
   (v: t)
   (consumed: U32.t)
 : Lemma
-  (requires (p32 input == Some (v, consumed)))
+  (requires (p32 input == ER.Correct (v, consumed)))
   (ensures (
     B32.length (s32 v) == U32.v consumed /\
     U32.v consumed <= B32.length input /\
@@ -160,19 +164,19 @@ let parser32_injective
   (requires (
     let p1 = p32 input1 in
     let p2 = p32 input2 in
-    Some? p1 /\
-    Some? p2 /\ (
-    let (Some (v1, _)) = p1 in
-    let (Some (v2, _)) = p2 in
+    ER.Correct? p1 /\
+    ER.Correct? p2 /\ (
+    let (ER.Correct (v1, _)) = p1 in
+    let (ER.Correct (v2, _)) = p2 in
     v1 == v2
   )))
   (ensures (
     let p1 = p32 input1 in
     let p2 = p32 input2 in
-    Some? p1 /\
-    Some? p2 /\ (
-    let (Some (v1, consumed1)) = p1 in
-    let (Some (v2, consumed2)) = p2 in
+    ER.Correct? p1 /\
+    ER.Correct? p2 /\ (
+    let (ER.Correct (v1, consumed1)) = p1 in
+    let (ER.Correct (v2, consumed2)) = p2 in
     v1 == v2 /\
     consumed1 == consumed2 /\
     U32.v consumed1 <= B32.length input1 /\
@@ -203,7 +207,7 @@ let parse32_size
   (data: t)
   (consumed: U32.t)
 : Lemma
-  (requires (p32 input == Some (data, consumed)))
+  (requires (p32 input == ER.Correct (data, consumed)))
   (ensures (
     k.parser_kind_low <= U32.v consumed /\ (
     Some? k.parser_kind_high ==> (
@@ -225,7 +229,7 @@ let parse32_total
     k.parser_kind_low <= B32.length input
   ))
   (ensures (
-    Some? (p32 input)
+    ER.Correct? (p32 input)
   ))
 = ()
   

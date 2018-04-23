@@ -1,4 +1,5 @@
 module LowParse.SLow.VLData
+open FStar.Error // for Correct, Error
 include LowParse.Spec.VLData
 include LowParse.SLow.FLData
 
@@ -177,7 +178,7 @@ let parse32_bounded_vldata_strong'
   (s: serializer p)
   (p32: parser32 p)
   (input: bytes32)
-: Tot (option (parse_bounded_vldata_strong_t min max #k #t #p s * U32.t))
+: Tot (result (parse_bounded_vldata_strong_t min max #k #t #p s * U32.t))
 = let res =
     parse32_strengthen
       #(parse_bounded_vldata_kind min max)
@@ -189,10 +190,10 @@ let parse32_bounded_vldata_strong'
       input
   in
   match res with
-  | None -> None
-  | Some (x, consumed) ->
+  | Error e -> Error ("parse32_bounded_vldata_strong': " ^ e)
+  | Correct (x, consumed) ->
     let x1 : t = x in
-    Some ((x1 <: parse_bounded_vldata_strong_t min max #k #t #p s), consumed)
+    Correct ((x1 <: parse_bounded_vldata_strong_t min max #k #t #p s), consumed)
 
 let parse32_bounded_vldata_strong_correct
   (min: nat)
@@ -206,7 +207,7 @@ let parse32_bounded_vldata_strong_correct
   (p32: parser32 p)
   (input: bytes32)
 : Lemma
-  ( let res : option (parse_bounded_vldata_strong_t min max s * U32.t) = 
+  ( let res : result (parse_bounded_vldata_strong_t min max s * U32.t) = 
       parse32_bounded_vldata_strong' min min32 max max32 s p32 input
     in
     parser32_correct (parse_bounded_vldata_strong min max s) input res)
@@ -221,10 +222,10 @@ let parse32_bounded_vldata_strong_correct
       input
   in
   match res with
-  | None -> ()
-  | Some (x, consumed) ->
+  | Error _ -> ()
+  | Correct (x, consumed) ->
     let x1 : t = x in
-    let res = Some ((x1 <: parse_bounded_vldata_strong_t min max #k #t #p s), consumed) in
+    let res = Correct ((x1 <: parse_bounded_vldata_strong_t min max #k #t #p s), consumed) in
     assert (parser32_correct (parse_bounded_vldata_strong min max s) input res)
 
 inline_for_extraction
