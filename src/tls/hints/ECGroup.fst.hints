@@ -8,7 +8,7 @@
       1,
       [ "@query", "assumption_CoreCrypto.ec_curve__uu___haseq" ],
       0,
-      "4db09c0c6597ff840d296b7686a5940c"
+      "43e327b9674eb424996e84c540acfc8f"
     ],
     [
       "ECGroup.pre_keyshare",
@@ -48,7 +48,7 @@
         "haseqECGroup_Tm_refine_a8698f94727f8312ae07c7e01fdaff78"
       ],
       0,
-      "33f9274bc3a91fa2abb1dc0e49d46aef"
+      "95b5f5957e887bcb442727a427b547b7"
     ],
     [
       "ECGroup.pre_keyshare",
@@ -106,7 +106,7 @@
         "haseqECGroup_Tm_refine_a8698f94727f8312ae07c7e01fdaff78"
       ],
       0,
-      "27aaf489821f1aefaf439373df1f6223"
+      "7f4de1d7701e8927ddc701f1ebb5d49f"
     ],
     [
       "ECGroup.__proj__KS_CC__item___0",
@@ -184,7 +184,7 @@
         "haseqECGroup_Tm_refine_a8698f94727f8312ae07c7e01fdaff78"
       ],
       0,
-      "81e557b4c29948a01611e038cca7d86b"
+      "21cb9c0734b7e163c5b894d9968b1c04"
     ],
     [
       "ECGroup.pre_share",
@@ -235,7 +235,7 @@
         "haseqECGroup_Tm_refine_a8698f94727f8312ae07c7e01fdaff78"
       ],
       0,
-      "de200513f84f5bdfa682e15f02b0dfb5"
+      "98a585f03a33b0f123b08a27aa31e1c4"
     ],
     [
       "ECGroup.__proj__S_CC__item___0",
@@ -288,7 +288,7 @@
         "haseqPrims_Tm_refine_ba523126f67e00e7cd55f0b92f16681d"
       ],
       0,
-      "8e010ea7230de97549e3da7c0a3f81c4"
+      "163477b82e34b53d87d432a25a39459a"
     ],
     [
       "ECGroup.__proj__EC_CORE__item___0",
@@ -301,7 +301,7 @@
         "refinement_interpretation_ECGroup_Tm_refine_88a982c45d92fce449f91a119832f38d"
       ],
       0,
-      "81d122f0d87d4f5ba04de153416c453d"
+      "e07a10fa99be2467d3b8b11dc09ca9c9"
     ],
     [
       "ECGroup.__proj__EC_UNKNOWN__item___0",
@@ -349,7 +349,7 @@
         "typing_Mem.is_tls_rgn"
       ],
       0,
-      "fc505c1d771f804592d0c8a8e836122f"
+      "7ed8fd0b311af1c707df97cccba165b5"
     ],
     [
       "ECGroup.keygen",
@@ -417,7 +417,7 @@
         "typing_Mem.is_tls_rgn", "typing_Mem.tls_define_region"
       ],
       0,
-      "705209ee1fc29d04bec82326d2df64d1"
+      "03dc83e3d027ce95d8a62e3b84bd2dd0"
     ],
     [
       "ECGroup.dh_initiator",
@@ -496,7 +496,7 @@
         "fuel_guarded_inversion_CoreCrypto.ec_curve"
       ],
       0,
-      "3dc355eb181215abc8ce02b13e83f999"
+      "a545f2b3426c9f1b8e88abf5be5dc5ef"
     ],
     [
       "ECGroup.curve_id",
@@ -535,9 +535,10 @@
         "fuel_guarded_inversion_Format.UncompressedPointRepresentation.uncompressedPointRepresentation",
         "function_token_typing_FStar.UInt32.n",
         "function_token_typing_FStar.UInt8.n",
-        "function_token_typing_Mem.tls_region",
-        "lemma_FStar.Buffer.lemma_size", "lemma_FStar.UInt.pow2_values",
-        "primitive_Prims.op_AmpAmp", "primitive_Prims.op_LessThanOrEqual",
+        "function_token_typing_Mem.tls_region", "int_inversion",
+        "int_typing", "lemma_FStar.Buffer.lemma_size",
+        "lemma_FStar.UInt.pow2_values", "primitive_Prims.op_AmpAmp",
+        "primitive_Prims.op_LessThanOrEqual",
         "primitive_Prims.op_Subtraction",
         "proj_equation_CoreCrypto.Mkec_point_ecx",
         "proj_equation_CoreCrypto.Mkec_point_ecy",
@@ -562,7 +563,7 @@
         "typing_CoreCrypto.ec_bytelen", "typing_Mem.is_tls_rgn"
       ],
       0,
-      "87612f4394cb2dad7f11953bd81ac62c"
+      "518af4dbb9a6547c85220d24fe500bf6"
     ],
     [
       "ECGroup.parse_point",
@@ -608,7 +609,8 @@
         "disc_equation_FStar.Pervasives.Native.None",
         "disc_equation_FStar.Pervasives.Native.Some",
         "equation_ECGroup.group", "equation_ECGroup.parse_curve",
-        "equation_ECGroup.parse_point", "equation_FStar.Bytes.lbytes",
+        "equation_ECGroup.parse_point", "equation_ECGroup.share",
+        "equation_FStar.Bytes.lbytes",
         "equation_FStar.Monotonic.HyperHeap.disjoint",
         "equation_FStar.Seq.Properties.split", "equation_FStar.UInt.fits",
         "equation_FStar.UInt.max_int", "equation_FStar.UInt.min_int",
@@ -660,7 +662,7 @@
         "typing_Mem.is_tls_rgn", "typing_Mem.tls_define_region"
       ],
       0,
-      "988cfda6f7de249fd0fc6c5444c23df0"
+      "4bae0fc843b363074e06be40a837dd26"
     ],
     [
       "ECGroup.serialize_point",
@@ -705,7 +707,7 @@
         "typing_FStar.Bytes.len", "typing_Mem.is_tls_rgn"
       ],
       0,
-      "f260e51089b0c1967b5c9bd5f7b9607d"
+      "e6f81987e44d99c0526049e4d715efaa"
     ],
     [
       "ECGroup.serialize_point",
@@ -796,7 +798,7 @@
         "typing_Mem.tls_define_region"
       ],
       0,
-      "02f2367b3328edb48e3efa0e5a58f507"
+      "a8ac353b851905fc7881b655a036a939"
     ]
   ]
 ]

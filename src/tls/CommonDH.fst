@@ -132,8 +132,10 @@ let is_ffdhe (ng:namedGroup): Tot bool = List.mem ng [ FFDHE2048; FFDHE3072; FFD
 //   = ()
 
 let default_group = ECDH (CoreCrypto.ECC_P256)
- 
+
+noextract
 let dh_region = new_region tls_tables_region
+
 noeq type ilog_entry (i:pre_dhi) =
   | Honest of MDM.t dh_region (pre_dhr i) (fun j -> bool) (fun _ -> True)
   | Corrupt
@@ -655,7 +657,7 @@ let keyShareEntryBytes (k:keyShareEntry): bytes =
     let nng = Some?.v (namedGroup_of_group g) in
     let kex = (match s with 
                | S_FF g x -> x 
-               | S_EC g x -> ECGroup.serialize x) in
+               | S_EC g x -> ECGroup.serialize_point x) in
     let kse = { group=nng; key_exchange=kex; } in
     keyShareEntry_serializer32 kse)
   | UnknownShare ng b ->

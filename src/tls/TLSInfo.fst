@@ -133,6 +133,7 @@ let defaultConfig =
   hello_retry = true;
   offer_shares = [Format.NamedGroup.X25519];
   custom_extensions = [];
+  use_tickets = [];
 
   // Server
   check_client_version_in_pms_for_old_tls = true;
@@ -198,11 +199,6 @@ type abbrInfo =
      abbr_srand: srand;
      abbr_session_hash: sessionHash;
      abbr_vd: option (cVerifyData * sVerifyData) }
-
-type resumeInfo (r:role): Type0 =
-  //17-04-19  connect_time:lbytes 4  * // initial Nonce.timestamp() for the connection
-  o:option bytes {r=Server ==> None? o} * // 1.2 ticket
-  l:list PSK.pskid {r=Server ==> List.Tot.isEmpty l} // assuming we do the PSK lookups locally
 
 // for sessionID. we treat empty bytes as the absence of identifier,
 // i.e. the session is not resumable.
@@ -546,7 +542,9 @@ type pre_index =
 
 type honest_index (i:pre_index) = bool
 
+noextract
 let safe_region:rgn = new_region tls_tables_region
+
 private type i_safety_log = MDM.t safe_region pre_index honest_index (fun _ -> True)
 private let s_table =
   if Flags.ideal_KEF then i_safety_log else unit
@@ -757,16 +755,27 @@ let sinfo_to_string (si:sessionInfo) = "TODO"
 // these functions are still used to control idealization in somes
 // files, so for now we keep them as `bool`
 
+inline_for_extraction
+let safeId (i:id) = false
+
+(* 2018.04.23 SZ: This can't be a match or abstract to fully normalize during extraction *)
+(*
 abstract let safeId: id -> bool = function
   | PlaintextID _ -> false
   | ID13 ki -> false // TODO
   | ID12 pv msid kdf ae cr sr rw -> false //TODO 1.2
+*)
 
+inline_for_extraction
+let authId (i:id) = false
+
+(* 2018.04.23 SZ: This can't be a match or abstract to fully normalize during extraction *)
+(*
 abstract let authId: id -> bool = function
   | PlaintextID _ -> false 
   | ID13 ki -> false // TODO
   | ID12 pv msid kdf ae cr sr rw -> false //TODO 1.2
-
+*)
 
 let plainText_is_not_auth (i:id)
   : Lemma (requires (PlaintextID? i))

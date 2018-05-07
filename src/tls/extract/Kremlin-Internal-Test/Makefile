@@ -52,12 +52,11 @@ INCLUDE_DIRS 	= secure kremlib include stub vale curve pki ffi uint128 .
 # then: remove Crypto_AEAD_Main because of the hacl_provider hack
 FILES 		= Cert C_Loops_Spec_Loops CommonDH CoreCrypto \
   Crypto_Indexing Crypto_Symmetric_Bytes Crypto_Plain \
-  CryptoTypes curve/Curve25519 DHGroup ECGroup Extensions Flag Flags FStar \
+  CryptoTypes curve/Curve25519 DHGroup ECGroup Extensions Flags Format FStar \
   HaclProvider Hashing_Spec kremlib/kremdate kremlib/kremstr kremlinit \
-  LowCProvider Nonce Parse PMS Prims PSK RSAKey \
+  LowCProvider LowParse Nonce Parse PMS Prims PSK RSAKey \
   secure/Crypto_HKDF_Crypto_HMAC \
   Specializations_Providers_AEAD stub/mipki_wrapper stub/core_crypto stub/hacl_aead \
-  QD_TLS_protocolVersion \
   stub/hacl_provider stub/buffer_bytes Test_Main TLSConstants TLS_Curve25519 TLSError TLSInfo \
   TLSInfoFlags vale/sha256_main_i vale/vale_aes_glue vale/Vale_Hash_SHA2_256 \
   uint128/uint128_wrapper stub/RegionAllocator
@@ -66,7 +65,7 @@ CFLAGS := $(addprefix -I,$(INCLUDE_DIRS)) $(CFLAGS) -Wall -Werror \
   -Wno-unused-variable -Wno-parentheses -Wno-unknown-warning-option \
   -Wno-unused-but-set-variable -Wno-infinite-recursion -g -fwrapv -fstack-check \
   -D_BSD_SOURCE -D_DEFAULT_SOURCE -D__USE_MINGW_ANSI_STDIO \
-  -Wno-missing-braces -Wno-tautological-compare
+  -Wno-missing-braces -Wno-error-tautological-compare -Wno-error-int-to-void-pointer-cast
 
 ifndef NO_OPENSSL
 CFLAGS += -I$(MLCRYPTO_HOME)/openssl/include

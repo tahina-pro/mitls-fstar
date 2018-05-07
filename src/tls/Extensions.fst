@@ -16,6 +16,8 @@ open TLSError
 open TLSConstants
 open Parse
 
+#set-options "--initial_fuel 2 --max_fuel 2 --initial_ifuel 1 --max_ifuel 1 --z3rlimit 10"
+
 //NS: hoisting a convenient function to avoid a closure conversion
 let rec existsb2 (f: 'a -> 'b -> bool) (x:'a) (y:list 'b) : bool =
   match y with
@@ -37,7 +39,7 @@ private type canFail (a:Type) =
 
 (* PRE-SHARED KEYS AND KEY EXCHANGES *)
 
-val pskiBytes: PSK.psk_identifier * PSK.obfuscated_ticket_age -> bytes
+val pskiBytes: psk_identifier * PSK.obfuscated_ticket_age -> bytes
 
 let pskiBytes (i,ot) =
   lemma_repr_bytes_values (UInt32.v ot);
@@ -1275,8 +1277,6 @@ let serverToNegotiatedExtension cfg cExtL cs ri resuming res sExt =
   match res with
   | Error z -> Error z
   | Correct pv0 ->
-    let exists_b_aux (#a:Type) (#b:Type) (env:b) (f:b -> a -> Tot bool) (l:list a) =
-      Some? (List.Helpers.find_aux env f l) in
     if not (List.Helpers.exists_b_aux sExt sameExt cExtL) then
       Error(AD_unsupported_extension, perror __SOURCE_FILE__ __LINE__ "server sent an unexpected extension")
     else match sExt with
@@ -1311,7 +1311,7 @@ let serverToNegotiatedExtension cfg cExtL cs ri resuming res sExt =
     | E_ec_point_format spf -> res // Can be sent in resumption, apparently (RFC 4492, 5.2)
     | E_key_share (CommonDH.ServerKeyShare sks) -> res
     | E_pre_shared_key (ServerPSK pski) -> res // bound check in Nego
-    | E_supported_groups named_group_list ->
+      | E_supported_groups named_group_list ->
       if resuming then Error(AD_unsupported_extension, perror __SOURCE_FILE__ __LINE__ "server sent supported groups in resumption")
       else res
     | e ->

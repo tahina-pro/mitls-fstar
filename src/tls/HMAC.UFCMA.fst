@@ -109,6 +109,7 @@ private let get_key (#ip:ipkg) (#i:ip.Pkg.t{ip.Pkg.registered i}) (k:key ip i)
     | RealKey rk -> rk
   else k
 
+noextract
 val create:
   ip:ipkg -> ha_of_i: (ip.Pkg.t -> ha) -> good_of_i: (i:ip.Pkg.t -> Hashing.macable (ha_of_i i) -> bool) ->
   i:ip.Pkg.t {ip.Pkg.registered i} ->
@@ -121,6 +122,7 @@ val create:
 
 #reset-options "--initial_fuel 1 --max_fuel 1 --initial_ifuel 0 --max_ifuel 0"
 
+noextract
 let create ip _ _ i u =
   let kv: keyrepr u = CoreCrypto.random32 (Hashing.tagLen u.alg) in
   let ck = MAC u kv in
@@ -134,6 +136,7 @@ let create ip _ _ i u =
       RealKey ck in
   k <: key ip i
 
+noextract
 let coerceT (ip: ipkg) (ha_of_i: ip.Pkg.t -> ha) (good_of_i: (i:ip.Pkg.t -> Hashing.macable (ha_of_i i) -> bool))
   (i: ip.Pkg.t {ip.Pkg.registered i /\ ~(safe i)})
   (u: info {u.alg = ha_of_i i /\ u.good == good_of_i i})
@@ -204,35 +207,28 @@ val verify:
   ip: ipkg -> ha_of_i: (ip.Pkg.t -> ha) -> good_of_i: (i:ip.Pkg.t -> Hashing.macable (ha_of_i i) -> bool) ->
   #i:ip.Pkg.t{ip.Pkg.registered i} -> 
   k: key ip i ->
-  p: Hashing.macable (ha_of_i i) 
-    // { 
-    // let u = usage k in 
-    // u.alg = ha_of_i i /\ u.good == good_of_i i 
-    // } 
-    ->
+  p: Hashing.macable (ha_of_i i) ->
   tag (usage k) -> 
   ST bool
   (requires fun _ -> let u = usage k in u.alg = ha_of_i i /\ u.good == good_of_i i)
   (ensures fun h0 b h1 -> 
     modifies_none h0 h1 /\
-    (b /\ safe i ==> (usage k).good p))
-
+    ((b /\ safe i) ==> (usage k).good p))
+ 
+#set-options "--initial_ifuel 1 --max_ifuel 1 --z3rlimit 20"
 let verify ip ha_of_i good_of_i #i k p t =
-  assert(let u = usage k in u.alg = ha_of_i i /\ u.good == good_of_i i);
   let MAC u kv = get_key k in
   let verified = HMAC.hmacVerify u.alg kv p t in
   if is_safe i then
     // We use the log to correct any verification errors
     let IdealKey _ _ log = k <: ir_key ip i in
-    let valid = 
-      admit() in
-      //18-02-25 TODO, should be:
-      // Some? (MDM.lookup log (t,p)) in
+    let tp : tag u * text u = (t,p) in
+    let valid = Some? (MDM.lookup log tp) in
     verified && valid
   else
     verified
 
-
+#reset-options "--initial_fuel 1 --max_fuel 1 --initial_ifuel 0 --max_ifuel 0"
 
 /// For TLS, we'll use something of the form
 ///
@@ -240,7 +236,7 @@ let verify ip ha_of_i good_of_i #i k p t =
 ///   exists digest.
 ///     hashed ha digest /\
 ///     text = hash ha digest /\
-///     witnessed (fun h -> "this is the writer's state is ...")
+///     witnessed (fun h -> "this is the writer's state ...")
 ///
 /// - how to deal with agility here?
 /// - which level of abstraction?
@@ -252,6 +248,7 @@ type info1
   =
   a:info{a.alg = ha_of_i i /\ a.good == good_of_i i}
 
+noextract
 unfold let localpkg 
   (ip: ipkg) (ha_of_i: ip.Pkg.t -> ha) 
   (good_of_i: (i:ip.Pkg.t -> Hashing.macable (ha_of_i i) -> bool)): 
@@ -294,6 +291,7 @@ private let ip : ipkg = Pkg.Idx id (fun _ -> True) (fun _ -> True) (fun _ -> tru
 
 #set-options "--initial_fuel 1 --max_fuel 1 --initial_ifuel 1 --max_ifuel 1 --z3rlimit 10"
 
+noextract
 private let test (a: ha) (r: rgn{~(is_tls_rgn r)}) (v': Hashing.macable a) (t': Hashing.Spec.tag a)
   : ST bool
   (requires fun h0 -> model)
@@ -311,8 +309,10 @@ private let test (a: ha) (r: rgn{~(is_tls_rgn r)}) (v': Hashing.macable a) (t': 
   assert(Pkg.Pkg?.key q == key ip);
   assert(Pkg.Pkg?.info q == info1 ip ha_of_i good_of_i);
 
-  let u : info1 ip ha_of_i good_of_i 0 = Info r a (good_of_i 0) in
-  let u = coerce_eq2 (info1 ip ha_of_i good_of_i) (Pkg.Pkg?.info q) u in
+  [@inline_let]
+  let u1 : info1 ip ha_of_i good_of_i 0 = Info r a (good_of_i 0) in
+  [@inline_let]
+  let u = coerce_eq2 (info1 ip ha_of_i good_of_i) (Pkg.Pkg?.info q) u1 in
 
   let h0 = Mem.get() in
   // assert(
@@ -355,6 +355,7 @@ private let test (a: ha) (r: rgn{~(is_tls_rgn r)}) (v': Hashing.macable a) (t': 
   let _ = IO.debug_print_string (string_of_key k^" tag="^print_bytes t^"\n") in
   b0 && not b1 
 
+noextract
 let unit_test(): St bool = 
   let _ = IO.debug_print_string "HMAC.UFCMA\n" in 
   assume(model); //18-01-07 avoid?
