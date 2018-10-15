@@ -15,13 +15,13 @@ class error_int_cls = {
 }
 
 inline_for_extraction
-val parse32_u8: parser32 parse_u8
+val parse32_u8: parser32_weak parse_u8
 
 inline_for_extraction
-val parse32_u16: parser32 parse_u16
+val parse32_u16: parser32_weak parse_u16
 
 inline_for_extraction
-val parse32_u32: parser32 parse_u32
+val parse32_u32: parser32_weak parse_u32
 
 // FIXME: WHY WHY WHY does typeclass inference not work here?
 
@@ -65,10 +65,10 @@ let validate_nochk32_u32 : validator_nochk32 parse_u32 =
   validate_nochk32_constant_size parse_u32 4ul ()
 
 inline_for_extraction
-val serialize32_u16 : serializer32 serialize_u16
+val serialize32_u16 : serializer32_weak serialize_u16
 
 inline_for_extraction
-val serialize32_u32 : serializer32 serialize_u32
+val serialize32_u32 : serializer32_weak serialize_u32
 
 inline_for_extraction
 val serialize32_u16_fail : serializer32_fail serialize_u16

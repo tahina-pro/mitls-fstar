@@ -18,7 +18,7 @@ class error_enum_cls = {
 }
 
 inline_for_extraction
-let validate32_enum_key [| validator32_cls |] (#key #repr: eqtype) (#k: parser_kind) (#p: parser k repr) [| error_enum_cls |] (v: validator32 p) (p32: parser32 p) (e: enum key repr) (destr: maybe_enum_destr_t bool e) : Tot (validator32 (parse_enum_key p e)) =
+let validate32_enum_key [| validator32_cls |] (#key #repr: eqtype) (#k: parser_kind) (#p: parser k repr) [| error_enum_cls |] (v: validator32 p) (p32: parser32_weak p) (e: enum key repr) (destr: maybe_enum_destr_t bool e) : Tot (validator32 (parse_enum_key p e)) =
   fun input sz ->
     let h = HST.get () in
     parse_enum_key_eq p e (B.as_seq h input);
@@ -54,7 +54,7 @@ let validate32_flat_maybe_enum_key
   (#p: parser k repr)
   [| error_enum_cls |]
   (v: validator32 p)
-  (p32: parser32 p)
+  (p32: parser32_weak p)
   (e: enum key repr)
   (f: (maybe_enum_key e -> GTot t))
   (filter_spec: (t -> GTot bool))

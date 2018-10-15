@@ -83,7 +83,7 @@ let validate32_sum_aux_payload_if
 : Tot (if_combinator _ (validate32_sum_aux_payload_eq #cls t pc k))
 = validate32_sum_aux_payload_if' t pc k
 
-#reset-options "--z3rlimit 128 --z3cliopt smt.arith.nl=false --query_stats --initial_ifuel 1 --max_ifuel 1 --initial_fuel 2 --max_fuel 2 --smtencoding.elim_box true --smtencoding.l_arith_repr native --z3refresh"
+#reset-options "--z3rlimit 256 --z3cliopt smt.arith.nl=false --query_stats --initial_ifuel 1 --max_ifuel 1 --initial_fuel 2 --max_fuel 2 --smtencoding.elim_box true --smtencoding.l_arith_repr native --z3refresh"
 
 inline_for_extraction
 let validate32_sum_aux
@@ -92,7 +92,7 @@ let validate32_sum_aux
   (#kt: parser_kind)
   (#p: parser kt (sum_repr_type t))
   (v: validator32 p)
-  (p32: parser32 p)
+  (p32: parser32_weak p)
   (pc: ((x: sum_key t) -> Tot (k: parser_kind & parser k (sum_type_of_tag t x))))
   (v_payload: ((k: sum_repr_type t)) -> Tot (validate32_sum_aux_payload_t t pc (maybe_enum_key_of_repr (sum_enum t) k)))
 : Tot (validator32 (parse_sum t p pc))
@@ -160,7 +160,7 @@ let validate32_sum
   (#kt: parser_kind)
   (#p: parser kt (sum_repr_type t))
   (v: validator32 #cls p)
-  (p32: parser32 p)
+  (p32: parser32_weak p)
   (pc: ((x: sum_key t) -> Tot (k: parser_kind & parser k (sum_type_of_tag t x))))
   (pc32: ((x: sum_key t) -> Tot (validator32 #cls (dsnd (pc x)))))
   (destr: dep_maybe_enum_destr_t (sum_enum t) (validate32_sum_aux_payload_t #cls t pc))
@@ -247,7 +247,7 @@ let validate32_dsum_cases_if
 : Tot (if_combinator _ (validate32_dsum_cases_eq #cls s f g x))
 = validate32_dsum_cases_if' s f g x
 
-#reset-options "--z3rlimit 64 --z3cliopt smt.arith.nl=false --query_stats --initial_ifuel 1 --max_ifuel 1 --smtencoding.elim_box true --smtencoding.l_arith_repr native --z3refresh"
+#reset-options "--z3rlimit 256 --z3cliopt smt.arith.nl=false --query_stats --initial_ifuel 1 --max_ifuel 1 --smtencoding.elim_box true --smtencoding.l_arith_repr native --z3refresh"
 
 inline_for_extraction
 let validate32_dsum
@@ -256,7 +256,7 @@ let validate32_dsum
   (t: dsum)
   (#p: parser kt (dsum_repr_type t))
   (v: validator32 #cls p)
-  (p32: parser32 p)
+  (p32: parser32_weak p)
   (f: (x: dsum_known_key t) -> Tot (k: parser_kind & parser k (dsum_type_of_known_tag t x)))
   (f32: (x: dsum_known_key t) -> Tot (validator32 #cls (dsnd (f x))))
   (#k': parser_kind)

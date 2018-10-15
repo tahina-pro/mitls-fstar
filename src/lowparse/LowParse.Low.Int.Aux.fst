@@ -10,9 +10,9 @@ module U32 = FStar.UInt32
 module B = LowStar.Buffer
 
 inline_for_extraction
-let parse32_u16 : parser32 parse_u16 =
+let parse32_u16 : parser32_weak parse_u16 =
   decode_u16_injective ();
-    make_total_constant_size_parser32 2 2ul
+    make_total_constant_size_parser32_weak 2 2ul
       #U16.t
       decode_u16
       ()
@@ -20,9 +20,9 @@ let parse32_u16 : parser32 parse_u16 =
         E.be_to_n_2 _ _ (E.u16 ()) input)
 
 inline_for_extraction
-let parse32_u32 : parser32 parse_u32 =
+let parse32_u32 : parser32_weak parse_u32 =
     decode_u32_injective ();
-    make_total_constant_size_parser32 4 4ul
+    make_total_constant_size_parser32_weak 4 4ul
       #U32.t
       decode_u32
       ()
@@ -30,9 +30,9 @@ let parse32_u32 : parser32 parse_u32 =
         E.be_to_n_4 _ _ (E.u32 ()) input)
 
 inline_for_extraction
-let parse32_u8 : parser32 parse_u8 =
+let parse32_u8 : parser32_weak parse_u8 =
   decode_u8_injective ();
-  make_total_constant_size_parser32 1 1ul
+  make_total_constant_size_parser32_weak 1 1ul
     decode_u8
     ()
     (fun b -> B.index b 0ul)
@@ -42,7 +42,7 @@ module HST = FStar.HyperStack.ST
 #push-options "--z3rlimit 32"
 
 inline_for_extraction
-let serialize32_u16 : serializer32 #_ #_ #parse_u16 serialize_u16 =
+let serialize32_u16 : serializer32_weak #_ #_ #parse_u16 serialize_u16 =
   fun out lo v ->
   assert (Seq.length (serialize #_ #_ #parse_u16 serialize_u16 v) == 2);
   let out' = B.sub out lo 2ul in
@@ -64,7 +64,7 @@ let serialize32_u16_fail = serializer32_fail_of_serializer #_ #_ #parse_u16 #ser
 
 #push-options "--z3rlimit 20"
 inline_for_extraction
-let serialize32_u32 : serializer32 #_ #_ #parse_u32 serialize_u32 =
+let serialize32_u32 : serializer32_weak #_ #_ #parse_u32 serialize_u32 =
   fun out lo v ->
   assert (Seq.length (serialize #_ #_ #parse_u32 serialize_u32 v) == 4);
   let out' = B.sub out lo 4ul in

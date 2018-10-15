@@ -219,7 +219,7 @@ let nondep_then_snd #k1 #t1 #p1 p1' #k2 #t2 p2 input =
 #pop-options
 
 inline_for_extraction
-let make_total_constant_size_parser32
+let make_total_constant_size_parser32_weak
   (sz: nat)
   (sz' : U32.t { U32.v sz' == sz } )
   (#t: Type0)
@@ -233,7 +233,7 @@ let make_total_constant_size_parser32
       h == h' /\
       res == f (B.as_seq h s)
   ))))
-: Tot (parser32 (make_total_constant_size_parser sz t f))
+: Tot (parser32_weak (make_total_constant_size_parser sz t f))
 = fun (input: buffer8) ->
   f' (B.sub input 0ul sz')
 
@@ -249,7 +249,7 @@ let validate32_filter
   (#p: parser k t)
   [| error_filter_cls |]
   (v32: validator32 p)
-  (p32: parser32 p)
+  (p32: parser32_weak p)
   (f: (t -> GTot bool))
   (f' : ((x: t) -> Tot (y: bool { y == f x } )))
 : Tot (validator32 (parse_filter p f))
@@ -276,11 +276,11 @@ let validate_nochk32_filter
 module MO = LowStar.Modifies
 
 inline_for_extraction
-let parse32_filter'
+let parse32_filter_weak'
   (#k: parser_kind)
   (#t: Type0)
   (#p: parser k t)
-  (p32: parser32 p)
+  (p32: parser32_weak p)
   (f: (t -> GTot bool))
   (input: buffer8)
 : HST.Stack (x: t { f x == true } )
@@ -297,46 +297,46 @@ let parse32_filter'
 = p32 input
 
 inline_for_extraction
-let parse32_filter
+let parse32_filter_weak
   (#k: parser_kind)
   (#t: Type0)
   (#p: parser k t)
-  (p32: parser32 p)
+  (p32: parser32_weak p)
   (f: (t -> GTot bool))
-: Tot (parser32 (parse_filter p f))
+: Tot (parser32_weak (parse_filter p f))
 = fun input ->
-  parse32_filter' p32 f input
+  parse32_filter_weak' p32 f input
 
 inline_for_extraction
-let parse32_synth
+let parse32_synth_weak
   (#k: parser_kind)
   (#t1: Type0)
   (#t2: Type0)
   (p1: parser k t1)
   (f2: t1 -> GTot t2)
   (f2': (x: t1) -> Tot (y: t2 { y == f2 x } )) 
-  (p1' : parser32 p1)
+  (p1' : parser32_weak p1)
   (u: unit {
     synth_injective f2
   })
-: Tot (parser32 (parse_synth p1 f2))
+: Tot (parser32_weak (parse_synth p1 f2))
 = fun input ->
   let res = p1' input in
   f2' res <: t2
 
 inline_for_extraction
-let parse32_synth'
+let parse32_synth_weak'
   (#k: parser_kind)
   (#t1: Type0)
   (#t2: Type0)
   (p1: parser k t1)
   (f2: t1 -> Tot t2)
-  (p1' : parser32 p1)
+  (p1' : parser32_weak p1)
   (u: unit {
     synth_injective f2
   })
-: Tot (parser32 (parse_synth p1 f2))
-= parse32_synth p1 f2 (fun x -> f2 x) p1' u
+: Tot (parser32_weak (parse_synth p1 f2))
+= parse32_synth_weak p1 f2 (fun x -> f2 x) p1' u
 
 inline_for_extraction
 let validate32_and_then
@@ -345,7 +345,7 @@ let validate32_and_then
   (#t1: Type0)
   (#p1: parser k1 t1)
   (v1: validator32 p1)
-  (p1': parser32 p1)
+  (p1': parser32_weak p1)
   (#k2: parser_kind)
   (#t2: Type0)
   (#p2: (t1 -> parser k2 t2))
@@ -371,7 +371,7 @@ let validate32_filter_and_then
   (#t1: Type0)
   (#p1: parser k1 t1)
   (v1: validator32 p1)
-  (p1': parser32 p1)
+  (p1': parser32_weak p1)
   (f: (t1 -> GTot bool))
   (f' : ((x: t1) -> Tot (y: bool { y == f x } )))
   (#k2: parser_kind)

@@ -260,7 +260,7 @@ let ghost_parse32
   Ghost.elift1 f (Ghost.hide ())
 
 inline_for_extraction
-let parser32
+let parser32_weak
   (#k: parser_kind)
   (#t: Type0)
   (p: parser k t)
@@ -336,7 +336,7 @@ let read_from_buffer
   (#p2: parser k2 t2)
   (#rel: (t1 -> t2 -> GTot Type0))
   (a12: accessor p1 p2 rel)
-  (p2' : parser32 p2)
+  (p2' : parser32_weak p2)
   (input: buffer8)
 : HST.Stack t2
   (requires (fun h ->
@@ -835,7 +835,7 @@ let contains_valid_serialized_data_or_fail_loc_includes_loc_ibuffer
 = ()
 
 inline_for_extraction
-let serializer32
+let serializer32_weak
   (#k: parser_kind)
   (#t: Type)
   (#p: parser k t)
@@ -872,7 +872,6 @@ let serializer32_fail
     M.modifies (loc_ibuffer b lo hi) h h'
   ))
 
-
 (* Stateful serializers for constant-size parsers *)
 
 inline_for_extraction
@@ -881,7 +880,7 @@ let serializer32_fail_of_serializer
   (#t: Type)
   (#p: parser k t)
   (#s: serializer p)
-  (s32: serializer32 s)
+  (s32: serializer32_weak s)
   (psz: I32.t { k.parser_kind_high == Some k.parser_kind_low /\ k.parser_kind_low == I32.v psz } ) 
 : Tot (serializer32_fail s)
 = fun out (len: I32.t { I32.v len == B.length out } ) lo v ->

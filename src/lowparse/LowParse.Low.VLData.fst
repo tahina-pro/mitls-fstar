@@ -15,7 +15,7 @@ class error_vldata_cls = {
 inline_for_extraction
 let parse32_bounded_integer
   (i: integer_size)
-: Tot (parser32 (parse_bounded_integer i))
+: Tot (parser32_weak (parse_bounded_integer i))
 = [@inline_let]
   let _ = integer_size_values i in
   match i with
@@ -227,7 +227,7 @@ val serialize32_bounded_integer
   (u: unit {
     min <= max /\ max > 0 /\ max < 4294967296
   })
-: Tot (serializer32 (serialize_bounded_integer (log256' max)))
+: Tot (serializer32_weak (serialize_bounded_integer (log256' max)))
 
 #set-options "--z3rlimit 16"
 
