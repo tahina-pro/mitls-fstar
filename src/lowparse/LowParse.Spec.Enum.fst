@@ -148,6 +148,21 @@ let enum_key_of_repr
   L.assoc_mem k e;
   (k <: enum_key e)
 
+let parse_enum_key_filter
+  (#key #repr: eqtype)
+  (e: enum key repr)
+  (r: repr)
+: GTot bool
+= list_mem r (list_map snd e)
+
+
+let parse_enum_key_synth
+  (#key #repr: eqtype)
+  (e: enum key repr)
+  (x: repr {list_mem x (list_map snd e) == true})
+: GTot (enum_key e)
+= enum_key_of_repr e x
+
 let parse_enum_key
   (#k: parser_kind)
   (#key #repr: eqtype)
@@ -156,10 +171,10 @@ let parse_enum_key
 : Tot (parser (parse_filter_kind k) (enum_key e))
 = (p
     `parse_filter`
-    (fun (r: repr) -> list_mem r (list_map snd e))
+    (parse_enum_key_filter e)
   )
   `parse_synth`
-  (fun (x: repr {list_mem x (list_map snd e) == true})  -> enum_key_of_repr e x)
+  (parse_enum_key_synth e)
 
 let enum_repr_of_key
   (#key #repr: eqtype)
@@ -277,8 +292,8 @@ let parse_enum_key_eq
     end
   | _ -> None
   ))
-= parse_filter_eq p (fun (r: repr) -> list_mem r (list_map snd e)) input;
-  parse_synth_eq (p `parse_filter` (fun (r: repr) -> list_mem r (list_map snd e))) (fun (x: repr { list_mem x (list_map snd e) == true } ) -> enum_key_of_repr e x) input
+= parse_filter_eq p (parse_enum_key_filter e) input;
+  parse_synth_eq (p `parse_filter` (parse_enum_key_filter e)) (parse_enum_key_synth e) input
 
 let repr_of_maybe_enum_key
   (#key #repr: eqtype)

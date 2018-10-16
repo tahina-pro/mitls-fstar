@@ -257,3 +257,85 @@ let list_tail
     v == v'
   ))))
 = B.offset input (v input)
+
+#reset-options "--z3rlimit 16"
+
+let contains_valid_serialized_data_or_fail_nil
+  (#k: parser_kind)
+  (#t: Type0)
+  (#p: parser k t)
+  (h: HS.mem)
+  (s: serializer p)
+  (b: buffer8)
+  (i: I32.t)
+: Lemma
+  (requires (serialize_list_precond k /\ I32.v i <= B.length b /\ B.live h b))
+  (ensures (contains_valid_serialized_data_or_fail h (serialize_list _ s) b i [] i))
+= contains_valid_serialized_data_or_fail_equiv h (serialize_list _ s) b i [] i;
+  serialize_list_nil _ s
+
+let contains_valid_serialized_data_or_fail_cons
+  (#k: parser_kind)
+  (#t: Type0)
+  (#p: parser k t)
+  (h: HS.mem)
+  (s: serializer p)
+  (b: buffer8)
+  (lo: I32.t)
+  (hd: t)
+  (mi: I32.t)
+  (tl: list t)
+  (hi: I32.t) 
+: Lemma
+  (requires (
+    serialize_list_precond k /\
+    contains_valid_serialized_data_or_fail h s b lo hd mi /\
+    contains_valid_serialized_data_or_fail h (serialize_list _ s) b mi tl hi
+  ))
+  (ensures (contains_valid_serialized_data_or_fail h (serialize_list _ s) b lo (hd :: tl) hi))
+= contains_valid_serialized_data_or_fail_equiv h s b lo hd mi;
+  contains_valid_serialized_data_or_fail_equiv h (serialize_list _ s) b mi tl hi;
+  contains_valid_serialized_data_or_fail_equiv h (serialize_list _ s) b lo (hd :: tl) hi;
+  serialize_list_cons _ s hd tl;
+  if I32.v lo < 0
+  then ()
+  else if I32.v mi < 0
+  then ()
+  else if I32.v hi < 0
+  then ()
+  else
+    seq_append_slice (B.as_seq h b) (I32.v lo) (I32.v mi) (I32.v hi)
+
+module L = FStar.List.Tot
+
+let contains_valid_serialized_data_or_fail_append
+  (#k: parser_kind)
+  (#t: Type0)
+  (#p: parser k t)
+  (h: HS.mem)
+  (s: serializer p)
+  (b: buffer8)
+  (lo: I32.t)
+  (hd: list t)
+  (mi: I32.t)
+  (tl: list t)
+  (hi: I32.t) 
+: Lemma
+  (requires (
+    serialize_list_precond k /\
+    contains_valid_serialized_data_or_fail h (serialize_list _ s) b lo hd mi /\
+    contains_valid_serialized_data_or_fail h (serialize_list _ s) b mi tl hi
+  ))
+  (ensures (contains_valid_serialized_data_or_fail h (serialize_list _ s) b lo (hd `L.append` tl) hi))
+= contains_valid_serialized_data_or_fail_equiv h (serialize_list _ s) b lo hd mi;
+  contains_valid_serialized_data_or_fail_equiv h (serialize_list _ s) b mi tl hi;
+  contains_valid_serialized_data_or_fail_equiv h (serialize_list _ s) b lo (hd `L.append` tl) hi;
+  serialize_list_append _ s hd tl;
+  if I32.v lo < 0
+  then ()
+  else if I32.v mi < 0
+  then ()
+  else if I32.v hi < 0
+  then ()
+  else
+    seq_append_slice (B.as_seq h b) (I32.v lo) (I32.v mi) (I32.v hi)

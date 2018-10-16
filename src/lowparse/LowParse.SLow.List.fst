@@ -1,35 +1,33 @@
 module LowParse.SLow.List
-include LowParse.Spec.List
+include LowParse.Low.List
 include LowParse.SLow.Combinators
 
-module B32 = FStar.Bytes
 module U32 = FStar.UInt32
 module CL = C.Loops
 
-#set-options "--z3rlimit 16 --max_fuel 8 --max_ifuel 8"
+#set-options "--z3rlimit 16"
 
 module L = FStar.List.Tot
 
 let rec parse_list_tailrec'
   (#k: parser_kind)
   (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (b: bytes32)
+  (p: parser k t)
+  (b: bytes)
   (aux: list t)
 : GTot (option (list t))
-  (decreases (B32.length b))
-= if B32.len b = 0ul
+  (decreases (Seq.length b))
+= if Seq.length b = 0
   then 
     Some (L.rev aux)
   else
-    match p32 b with
+    match parse p b with
     | None -> None
     | Some (v, n) ->
-      if n = 0ul
+      if n = 0
       then None (* elements cannot be empty *)
       else
-	parse_list_tailrec' p32 (B32.slice b n (B32.len b)) (v :: aux)
+	parse_list_tailrec' p (Seq.slice b n (Seq.length b)) (v :: aux)
 
 let list_append_rev_cons
   (#t: Type)
@@ -43,32 +41,31 @@ let list_append_rev_cons
 let rec parse_list_tailrec'_correct'
   (#k: parser_kind)
   (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (b: bytes32)
+  (p: parser k t)
+  (b: bytes)
   (aux: list t)
 : Lemma
   (requires True)
   (ensures (
-    parse_list_tailrec' p32 b aux == (
-    match parse (parse_list p) (B32.reveal b) with
+    parse_list_tailrec' p b aux == (
+    match parse (parse_list p) b with
     | Some (l, n) -> Some (L.append (L.rev aux) l)
     | None -> None
   )))
-  (decreases (B32.length b))
-= if B32.len b = 0ul
+  (decreases (Seq.length b))
+= if Seq.length b = 0
   then
     L.append_l_nil (L.rev aux)
   else
-    match p32 b with
+    match parse p b with
     | None -> ()
     | Some (v, n) ->
-      if n = 0ul
+      if n = 0
       then ()
       else begin
-	let s = B32.slice b n (B32.len b) in
-	parse_list_tailrec'_correct' p32 s (v :: aux);
-	match parse (parse_list p) (B32.reveal s) with
+	let s = Seq.slice b n (Seq.length b) in
+	parse_list_tailrec'_correct' p s (v :: aux);
+	match parse (parse_list p) (s) with
 	| Some (l, n') ->
           list_append_rev_cons v aux l
         | None -> ()
@@ -77,15 +74,14 @@ let rec parse_list_tailrec'_correct'
 let parse_list_tailrec'_correct
   (#k: parser_kind)
   (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (b: bytes32)
+  (p: parser k t)
+  (b: bytes)
 : Lemma
-  begin match parse (parse_list p) (B32.reveal b) with
-  | Some (l, n) -> parse_list_tailrec' p32 b [] == Some l
-  | None -> parse_list_tailrec' p32 b [] == None
+  begin match parse (parse_list p) (b) with
+  | Some (l, n) -> parse_list_tailrec' p b [] == Some l
+  | None -> parse_list_tailrec' p b [] == None
   end
-= parse_list_tailrec'_correct' p32 b []
+= parse_list_tailrec'_correct' p b []
 
 let list_rev_inv
   (#t: Type)
@@ -97,6 +93,8 @@ let list_rev_inv
   L.rev l == L.rev_acc rem acc /\
   (b == false ==> rem == [])
 
+inline_for_extraction
+noextract
 let list_rev
   (#t: Type)
   (l: list t)
@@ -117,29 +115,40 @@ let list_rev
     in
     l'
 
+module B = LowStar.Buffer
+module HS = FStar.HyperStack
+module I32 = FStar.Int32
+module U8 = FStar.UInt8
+module G = FStar.Ghost
+
 let parse_list_tailrec_inv
   (#k: parser_kind)
   (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (input: bytes32)
+  (p: parser k t)
+  (input: B.buffer U8.t)
+  (len: I32.t)
+  (aux: B.pointer (I32.t * list t))
+  (h0: G.erased HS.mem)
+  (h: HS.mem)
   (b: bool)
-  (x: option (bytes32 * list t))
 : GTot Type0
-= match x with
-  | Some (input', accu') ->
-    parse_list_tailrec' p32 input [] == parse_list_tailrec' p32 input' accu' /\
-    (b == false ==> B32.length input' == 0)
-  | None -> 
-    b == false /\ None? (parse_list_tailrec' p32 input [])
+= B.disjoint aux input /\
+  B.modifies (B.loc_buffer aux) (G.reveal h0) h /\
+  B.live (G.reveal h0) aux /\
+  B.live (G.reveal h0) input /\ (
+  let sinput = B.as_seq (G.reveal h0) input in
+  Some? (parse_list_tailrec' p sinput []) /\
+  I32.v len == B.length input /\ (
+    match Seq.index (B.as_seq h aux) 0 with
+    | (idx', accu') ->
+      I32.v idx' >= 0 /\
+      I32.v idx' <= B.length input /\
+      parse_list_tailrec' p sinput [] == parse_list_tailrec' p (Seq.slice sinput (I32.v idx') (B.length input)) accu' /\
+      (b == true ==> I32.v idx' == B.length input)
+  ))
 
-let parse_list_tailrec_measure
-  (#t: Type0)
-  (x: option (bytes32 * list t))
-: GTot nat
-= match x with
-  | None -> 0
-  | Some (input', _) -> B32.length input'
+module HST = FStar.HyperStack.ST
+module Cast = FStar.Int.Cast
 
 inline_for_extraction
 let parse_list_tailrec_body
@@ -147,28 +156,28 @@ let parse_list_tailrec_body
   (#t: Type0)
   (#p: parser k t)
   (p32: parser32 p)
-  (input: bytes32)
-: (x: option (bytes32 * list t)) ->
-  Pure (bool * option (bytes32 * list t))
-  (requires (parse_list_tailrec_inv p32 input true x))
-  (ensures (fun (continue, y) ->
-    parse_list_tailrec_inv p32 input continue y /\
-    (if continue then parse_list_tailrec_measure y < parse_list_tailrec_measure x else True)
+  (input: B.buffer U8.t)
+  (len: I32.t)
+  (aux: B.pointer (I32.t * list t))
+  (h0: G.erased HS.mem)
+: HST.Stack bool
+  (requires (fun h -> parse_list_tailrec_inv p input len aux h0 h false))
+  (ensures (fun h stop h' ->
+    parse_list_tailrec_inv p input len aux h0 h false /\
+    parse_list_tailrec_inv p input len aux h0 h' stop
   ))
-= fun (x: option (bytes32 * list t)) ->
-  let (Some (input', accu')) = x in
-  let len = B32.len input' in
-  if len = 0ul
-  then (false, x)
+= let x : (I32.t * list t) = B.index aux 0ul in
+  let (idx', accu') = x in
+  if idx' = len
+  then true
   else
-    match p32 input' with
-    | Some (v, consumed) ->
-      if consumed = 0ul
-      then (false, None)
-      else
-        let input'' = B32.slice input' consumed len in
-        (true, Some (input'', v :: accu'))
-    | None -> (false, None)
+    let len' = I32.sub len idx' in 
+    let input' = B.sub input (Cast.int32_to_uint32 idx') (Cast.int32_to_uint32 len') in
+    begin match p32 input' len' with
+    | (v, consumed) ->
+      B.upd aux 0ul (idx' `I32.add` consumed, v :: accu'); 
+      false
+    end
 
 inline_for_extraction
 let parse_list_tailrec
@@ -176,18 +185,29 @@ let parse_list_tailrec
   (#t: Type0)
   (#p: parser k t)
   (p32: parser32 p)
-  (input: bytes32)
-: Tot (res: option (list t) { res == parse_list_tailrec' p32 input [] } )
-= let accu =
-    CL.total_while
-      (parse_list_tailrec_measure #t)
-      (parse_list_tailrec_inv p32 input)
-      (fun x -> parse_list_tailrec_body p32 input x)
-      (Some (input, []))
-  in
-  match accu with
-  | None -> None
-  | Some (_, accu') -> Some (list_rev accu')
+  (input: B.buffer U8.t)
+  (len: I32.t)
+: HST.Stack (list t)
+  (requires (fun h -> 
+    B.live h input /\
+    I32.v len == B.length input /\
+    Some? (parse_list_tailrec' p (B.as_seq h input) [])
+  ))
+  (ensures (fun h res h' ->
+    B.modifies B.loc_none h h' /\
+    B.live h' input /\
+    parse_list_tailrec' p (B.as_seq h input) [] == Some res
+  ))
+= HST.push_frame ();
+  let aux : B.pointer (I32.t * list t) = B.alloca (0l, []) 1ul in
+  let h0 = G.hide (HST.get ()) in
+  C.Loops.do_while
+    (parse_list_tailrec_inv p input len aux h0)
+    (fun () -> parse_list_tailrec_body p32 input len aux h0)
+    ;
+  let (_, res) = B.index aux 0ul in
+  HST.pop_frame ();
+  list_rev res
 
 inline_for_extraction
 let parse32_list
@@ -196,167 +216,124 @@ let parse32_list
   (#p: parser k t)
   (p32: parser32 p)
 : Tot (parser32 (parse_list p))
-= fun (input: bytes32) -> ((
-    parse_list_tailrec'_correct p32 input;
-    match parse_list_tailrec p32 input with
-    | None -> None
-    | Some res ->
-      parse_list_bare_consumed p (B32.reveal input);
-      Some (res, B32.len input)
-  ) <: (res: option (list t * U32.t) { parser32_correct (parse_list p) input res } ))
+= fun input len ->
+    let h = HST.get () in
+    parse_list_tailrec'_correct p (B.as_seq h input);
+    parse_list_bare_consumed p (B.as_seq h input);
+    let res = parse_list_tailrec p32 input len in
+    (res, len)
 
-let rec partial_serialize32_list'
+let serialize32_list_inv
   (#t: Type0)
   (#k: parser_kind)
   (p: parser k t)
   (s: serializer p)
-  (s32: partial_serializer32 s)
   (input: list t)
-: Ghost bytes32
-  (requires (
-    serialize_list_precond k /\ (
-    Seq.length (serialize (serialize_list p s) input) < 4294967296
-  )))
-  (ensures (fun (res: bytes32) ->
-    serialize_list_precond k /\
-    serializer32_correct (serialize_list p s) input res
-  ))
-  (decreases input)
-= match input with
-  | [] ->
-    let res = B32.empty_bytes in
-    assert (Seq.equal (B32.reveal res) (Seq.empty));
-    res
-  | a :: q ->
-    serialize_list_cons p s a q;
-    let sa = s32 a in
-    let sq = partial_serialize32_list' p s s32 q in
-    let res = B32.append sa sq in
-    res
-
-let rec partial_serialize32_list_tailrec'
-  (#t: Type0)
-  (#k: parser_kind)
-  (p: parser k t)
-  (s: serializer p)
-  (s32: partial_serializer32 s)
-  (accu: bytes32)
-  (input: list t)
-: Ghost bytes32
-  (requires (
-    serialize_list_precond k /\ (
-    B32.length accu + Seq.length (serialize (serialize_list p s) input) < 4294967296
-  )))
-  (ensures (fun (res: bytes32) ->
-    serialize_list_precond k /\
-    Seq.length (serialize (serialize_list p s) input) < 4294967296 /\
-    B32.reveal res == Seq.append (B32.reveal accu) (B32.reveal (partial_serialize32_list' p s s32 input))
-  ))
-  (decreases input)
-= match input with
-  | [] ->
-    Seq.append_empty_r (B32.reveal accu);
-    accu
-  | a :: q ->
-    serialize_list_cons p s a q;
-    let sa = s32 a in
-    let accu' = B32.append accu sa in
-    Seq.append_assoc (B32.reveal accu) (B32.reveal sa) (B32.reveal (partial_serialize32_list' p s s32 q));
-    partial_serialize32_list_tailrec' p s s32 accu' q
-
-let partial_serialize32_list'_inv
-  (#t: Type0)
-  (#k: parser_kind)
-  (p: parser k t)
-  (s: serializer p)
-  (s32: partial_serializer32 s)
-  (input: list t)
-  (continue: bool)
-  (x: bytes32 * list t)
+  (output: buffer8)
+  (len: I32.t)
+  (lo: I32.t)
+  (aux: B.pointer (I32.t * G.erased (list t) * list t))
+  (h0 h1: G.erased HS.mem)
+  (h: HS.mem)
+  (stop: bool)
 : GTot Type0
 = serialize_list_precond k /\
-  Seq.length (serialize (serialize_list p s) input) < 4294967296 /\ (
-    let (accu, input') = x in
-    B32.length accu + Seq.length (serialize (serialize_list p s) input') < 4294967296 /\
-    serializer32_correct
-      (serialize_list p s)
-      input
-      (partial_serialize32_list_tailrec' p s s32 accu input') /\
-    (continue == false ==> L.length input' == 0)
-  )
-
-let partial_serialize32_list'_measure
-  (#t: Type0)
-  (x: bytes32 * list t)
-: GTot nat
-= L.length (snd x)
-
-inline_for_extraction
-let partial_serialize32_list'_body
-  (#t: Type0)
-  (#k: parser_kind)
-  (p: parser k t)
-  (s: serializer p)
-  (s32: partial_serializer32 s)
-  (input: list t)
-: (x: (bytes32 * list t)) ->
-  Pure (bool * (bytes32 * list t))
-  (requires (partial_serialize32_list'_inv p s s32 input true x))
-  (ensures (fun (continue, y) ->
-    partial_serialize32_list'_inv p s s32 input continue y /\
-    (continue == true ==> partial_serialize32_list'_measure y < partial_serialize32_list'_measure x)
-  ))
-= fun (x: bytes32 * list t) ->
-  let (accu, input') = x in
-  match input' with
-  | [] -> (false, x)
-  | a :: q ->
-    let sa = s32 a in
-    let accu' = B32.append accu sa in
-    (true, (accu', q))
-
-let partial_serialize32_list'_init
-  (#t: Type0)
-  (#k: parser_kind)
-  (p: parser k t)
-  (s: serializer p)
-  (s32: partial_serializer32 s)
-  (input: list t)
-: Lemma
-  (requires (
-    serialize_list_precond k /\
-    Seq.length (serialize (serialize_list p s) input) < 4294967296
-  ))
-  (ensures (
-    partial_serialize32_list'_inv p s s32 input true (B32.empty_bytes, input)
-  ))
-= assert (Seq.equal (B32.reveal B32.empty_bytes) Seq.empty);
-  Seq.append_empty_l (B32.reveal (partial_serialize32_list' p s s32 input));
-  assert (B32.reveal (partial_serialize32_list' p s s32 input) == B32.reveal (partial_serialize32_list_tailrec' p s s32 B32.empty_bytes input));
-  assert (serializer32_correct (serialize_list p s) input (partial_serialize32_list_tailrec' p s s32 B32.empty_bytes input))
+  B.disjoint output aux /\
+  B.live (G.reveal h0) output /\
+  B.live (G.reveal h1) output /\
+  B.live h output /\
+  B.live (G.reveal h1) aux /\
+  B.live h aux /\
+  I32.v len == B.length output /\
+  I32.v lo <= B.length output /\ (
+  let (hi, hd, tl) = B.get h aux 0 in
+  B.modifies B.loc_none (G.reveal h0) (G.reveal h1) /\
+  B.modifies (B.loc_union (loc_ibuffer output lo hi) (B.loc_buffer aux)) (G.reveal h1) h /\
+  input == G.reveal hd `L.append` tl /\
+  contains_valid_serialized_data_or_fail h (serialize_list _ s) output lo (G.reveal hd) hi /\
+  (stop == true ==> (
+    contains_valid_serialized_data_or_fail h (serialize_list _ s) output lo input hi
+  )))
 
 inline_for_extraction
-let partial_serialize32_list
+let serialize32_list_body
   (#t: Type0)
   (#k: parser_kind)
   (p: parser k t)
   (s: serializer p)
-  (s32: partial_serializer32 s)
+  (s32: serializer32 s)
+  (input: list t)
+  (output: buffer8)
+  (len: I32.t)
+  (lo: I32.t)
+  (aux: B.pointer (I32.t * G.erased (list t) * list t))
+  (h0 h1: G.erased HS.mem)
+: HST.Stack bool
+  (requires (fun h -> serialize32_list_inv p s input output len lo aux h0 h1 h false))
+  (ensures (fun h stop h' ->
+    serialize32_list_inv p s input output len lo aux h0 h1 h false /\
+    serialize32_list_inv p s input output len lo aux h0 h1 h' stop
+  ))
+= let (mi, hd, tl) = B.index aux 0ul in
+  match tl with
+  | [] ->
+    L.append_l_nil (G.reveal hd);
+    true
+  | x :: tl' ->
+    let hi = s32 output len mi x in
+    let hd' = G.hide (L.append (G.reveal hd) [x]) in
+    B.upd aux 0ul (hi, hd', tl');
+    let h = HST.get () in
+    L.append_assoc (G.reveal hd) [x] tl' ;
+    contains_valid_serialized_data_or_fail_nil h s output hi;
+    contains_valid_serialized_data_or_fail_cons h s output mi x hi [] hi;
+    contains_valid_serialized_data_or_fail_append h s output lo (G.reveal hd) mi [x] hi;
+    if hi `I32.lt` 0l
+    then begin
+      contains_valid_serialized_data_or_fail_neg_intro h (serialize_list _ s) output hi tl' hi;
+      contains_valid_serialized_data_or_fail_append h s output lo (G.reveal hd') hi tl' hi;
+      true
+    end else begin
+      false
+    end
+
+inline_for_extraction
+let serialize32_list
+  (#t: Type0)
+  (#k: parser_kind)
+  (p: parser k t)
+  (s: serializer p)
+  (s32: serializer32 s)
   (u: unit {
     serialize_list_precond k
   })
-: Tot (partial_serializer32 (serialize_list p s))
-= fun (input: list t { Seq.length (serialize (serialize_list p s) input) < 4294967296 } ) -> ((
-    let (res, _) =
-      partial_serialize32_list'_init p s s32 input;
-      CL.total_while
-        partial_serialize32_list'_measure
-        (partial_serialize32_list'_inv p s s32 input)
-        (fun x -> partial_serialize32_list'_body p s s32 input x)
-        (B32.empty_bytes, input)
-    in
-    res
-  ) <: (res: bytes32 { serializer32_correct (serialize_list p s) input res }))
+: Tot (serializer32 (serialize_list p s))
+= fun output (len: I32.t { I32.v len == B.length output } ) lo input ->
+  if lo `I32.lt` 0l
+  then begin
+    let h = HST.get () in
+    contains_valid_serialized_data_or_fail_neg_intro h (serialize_list _ s) output lo input lo;
+    lo
+  end else begin
+    let h = HST.get () in
+    contains_valid_serialized_data_or_fail_nil h s output lo;
+    let h0 = G.hide h in
+    HST.push_frame ();
+    let h05 = HST.get () in
+    B.fresh_frame_modifies h h05;
+    let aux : B.pointer (I32.t * G.erased (list t) * list t) = B.alloca (lo, G.hide [], input) 1ul in
+    let h1 = G.hide (HST.get ()) in
+    C.Loops.do_while
+      (serialize32_list_inv _ s input output len lo aux h0 h1)
+      (fun () -> serialize32_list_body _ s s32 input output len lo aux h0 h1)
+      ;
+    let (hi, _, _) = B.index aux 0ul in
+    let h2 = HST.get () in
+    HST.pop_frame ();
+    let h3 = HST.get () in
+    B.popped_modifies h2 h3;
+    hi
+  end
 
 let size32_list_inv
   (#t: Type0)

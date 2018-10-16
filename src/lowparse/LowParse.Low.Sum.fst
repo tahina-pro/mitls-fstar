@@ -83,7 +83,7 @@ let validate32_sum_aux_payload_if
 : Tot (if_combinator _ (validate32_sum_aux_payload_eq #cls t pc k))
 = validate32_sum_aux_payload_if' t pc k
 
-#reset-options "--z3rlimit 128 --z3cliopt smt.arith.nl=false --query_stats --initial_ifuel 1 --max_ifuel 1 --initial_fuel 2 --max_fuel 2 --smtencoding.elim_box true --smtencoding.l_arith_repr native --z3refresh"
+#reset-options "--z3rlimit 256 --z3cliopt smt.arith.nl=false --query_stats --initial_ifuel 1 --max_ifuel 1 --initial_fuel 2 --max_fuel 2 --smtencoding.elim_box true --smtencoding.l_arith_repr native --z3refresh"
 
 inline_for_extraction
 let validate32_sum_aux
@@ -247,7 +247,7 @@ let validate32_dsum_cases_if
 : Tot (if_combinator _ (validate32_dsum_cases_eq #cls s f g x))
 = validate32_dsum_cases_if' s f g x
 
-#reset-options "--z3rlimit 64 --z3cliopt smt.arith.nl=false --query_stats --initial_ifuel 1 --max_ifuel 1 --smtencoding.elim_box true --smtencoding.l_arith_repr native --z3refresh"
+#reset-options "--z3rlimit 128 --z3cliopt smt.arith.nl=false --query_stats --initial_ifuel 1 --max_ifuel 1 --smtencoding.elim_box true --smtencoding.l_arith_repr native --z3refresh"
 
 inline_for_extraction
 let validate32_dsum

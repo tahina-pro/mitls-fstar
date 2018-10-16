@@ -65,10 +65,16 @@ let validate_nochk32_u32 : validator_nochk32 parse_u32 =
   validate_nochk32_constant_size parse_u32 4ul ()
 
 inline_for_extraction
+val serialize32_u8 : serializer32 serialize_u8
+
+inline_for_extraction
 val serialize32_u16 : serializer32 serialize_u16
 
 inline_for_extraction
 val serialize32_u32 : serializer32 serialize_u32
+
+inline_for_extraction
+val serialize32_u8_fail : serializer32_fail serialize_u8
 
 inline_for_extraction
 val serialize32_u16_fail : serializer32_fail serialize_u16

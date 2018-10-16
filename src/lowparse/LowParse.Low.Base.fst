@@ -259,6 +259,7 @@ let ghost_parse32
   in
   Ghost.elift1 f (Ghost.hide ())
 
+[@unifier_hint_injective]
 inline_for_extraction
 let parser32
   (#k: parser_kind)
@@ -279,6 +280,7 @@ let parser32
     res == res'
   )))
 
+[@unifier_hint_injective]
 inline_for_extraction
 let validator_nochk32
   (#k: parser_kind)
@@ -299,6 +301,7 @@ let validator_nochk32
     U32.v res == res'
   )))
 
+[@unifier_hint_injective]
 inline_for_extraction
 let accessor
   (#k1: parser_kind)
@@ -555,7 +558,7 @@ let exactly_contains_valid_data_invariant
   (hi: U32.t)
 : Lemma
   (requires (
-    M.modifies l h h' /\
+    M.modifies_inert l h h' /\
     exactly_contains_valid_data h p b lo x hi /\
     M.loc_disjoint l (loc_jbuffer b lo hi)
   ))
@@ -650,6 +653,22 @@ let contains_valid_serialized_data_or_fail_elim
       | Some sz' -> sz <= sz'
   )))))
   [SMTPat (contains_valid_serialized_data_or_fail h s b lo x hi)]
+= ()
+
+abstract
+let contains_valid_serialized_data_or_fail_neg_intro
+  (#k: parser_kind)
+  (#t: Type)
+  (h: HS.mem)
+  (#p: parser k t)
+  (s: serializer p)
+  (b: buffer8)
+  (lo: I32.t)
+  (x: t)
+  (hi: I32.t)
+: Lemma
+  (requires (B.live h b /\ I32.v lo < 0 /\ I32.v hi < 0))
+  (ensures (contains_valid_serialized_data_or_fail h s b lo x hi))
 = ()
 
 abstract
@@ -799,7 +818,7 @@ let contains_valid_serialized_data_or_fail_invariant
   (hi: I32.t)
 : Lemma
   (requires (
-    M.modifies l h h' /\
+    M.modifies_inert l h h' /\
     contains_valid_serialized_data_or_fail h s b lo x hi /\
     B.live h' b /\
     M.loc_disjoint l (loc_ibuffer b lo hi)
@@ -834,6 +853,27 @@ let contains_valid_serialized_data_or_fail_loc_includes_loc_ibuffer
   [SMTPat (contains_valid_serialized_data_or_fail h1 s1 b i0 x1 i1); SMTPat (contains_valid_serialized_data_or_fail h2 s2 b i1 x2 i2)]
 = ()
 
+[@unifier_hint_injective]
+inline_for_extraction
+let serializer32'
+  (#k: parser_kind)
+  (#t: Type)
+  (#p: parser k t)
+  (s: serializer p)
+: Tot Type
+= (b: buffer8) ->
+  (lo: U32.t) ->
+  (v: t) ->
+  HST.Stack unit
+  (requires (fun h -> B.live h b /\ U32.v lo + Seq.length (serialize s v) <= B.length b))
+  (ensures (fun h _ h' ->
+    let len = U32.uint_to_t (Seq.length (serialize s v)) in
+    M.modifies (M.loc_buffer (B.gsub b lo len)) h h' /\
+    B.live h' b /\
+    B.as_seq h' (B.gsub b lo len) `Seq.equal` serialize s v
+  ))
+
+[@unifier_hint_injective]
 inline_for_extraction
 let serializer32
   (#k: parser_kind)
@@ -853,6 +893,22 @@ let serializer32
     exactly_contains_valid_data h' p b lo v (U32.add lo len)
   ))
 
+inline_for_extraction
+let serializer32_of_serializer32'
+  (#k: parser_kind)
+  (#t: Type)
+  (#p: parser k t)
+  (#s: serializer p)
+  (s32: serializer32' s)
+: Tot (serializer32 s)
+= fun b lo v ->
+  s32 b lo v;
+  let ghi = FStar.Ghost.hide (U32.add lo (U32.uint_to_t (Seq.length (serialize s v)))) in
+  loc_jbuffer_eq b lo (FStar.Ghost.reveal ghi);
+  let h' = HST.get () in
+  exactly_contains_valid_data_equiv h' p b lo v (FStar.Ghost.reveal ghi)
+
+[@unifier_hint_injective]
 inline_for_extraction
 let serializer32_fail
   (#k: parser_kind)
@@ -920,3 +976,61 @@ let serializer32_fail_of_serializer
   
 inline_for_extraction
 let error_code = (x: I32.t { I32.v x < 0 } )
+
+(* Some instances for validator32_cls *)
+
+inline_for_extraction
+let default_validator32_cls : validator32_cls = {
+  validator32_error_gloc = G.hide M.loc_none;
+  validator32_error_inv = (fun _ -> True);
+  validator32_error_inv_loc_not_unused_in = (fun _ -> ());
+  validator32_error_inv_frame = (fun _ _ _ -> ());
+}
+
+inline_for_extraction
+let buffer_validator32_cls (#t: Type) (b: M.buffer t) : Tot validator32_cls = {
+  validator32_error_gloc = G.hide (M.loc_buffer b);
+  validator32_error_inv = (fun h -> M.live h b);
+  validator32_error_inv_loc_not_unused_in = (fun _ -> ());
+  validator32_error_inv_frame = (fun _ _ _ -> ());
+}
+
+inline_for_extraction
+let report_validation_error_gen
+  (#error_log_t: Type)
+  (transform_error: (error_log_t -> Tot error_log_t))
+  (b: M.pointer error_log_t)
+  (#k: parser_kind)
+  (#t: Type)
+  (#p: parser k t)
+  (v: validator32 #(buffer_validator32_cls b) p)
+: Tot (validator32 #(buffer_validator32_cls b) p)
+= fun input len ->
+  let res = v input len in
+  begin if res `I32.lt` 0l
+  then
+    let r = B.index b 0ul in
+    B.upd b 0ul (transform_error r)
+  end;
+  res
+
+inline_for_extraction
+let append_validation_error
+  (#error_log_t: Type)
+  (append: (error_log_t -> error_log_t -> Tot error_log_t))
+  (x: error_log_t)
+= report_validation_error_gen (fun x0 -> append x0 x)
+
+inline_for_extraction
+let report_first_validation_error
+  (#error_log_t: Type)
+  (x: error_log_t)
+= report_validation_error_gen (fun x0 -> match x0 with None -> Some x | _ -> x0)
+
+inline_for_extraction
+let buffer_validator32_of_default
+  (#et: Type) (b: M.buffer et)
+  (#k: parser_kind) (#t: Type) (#p: parser k t)
+  (v: validator32 #default_validator32_cls p)
+: Tot (validator32 #(buffer_validator32_cls b) p)
+= fun input len -> v input len

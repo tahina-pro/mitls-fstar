@@ -1,9 +1,12 @@
 module LowParse.SLow.FLData
-include LowParse.Spec.FLData
+include LowParse.Low.FLData
 include LowParse.SLow.Combinators
 
-module B32 = LowParse.Bytes32
 module U32 = FStar.UInt32
+module Cast = FStar.Int.Cast
+module I32 = FStar.Int32
+module B = LowStar.Buffer
+module HST = FStar.HyperStack.ST
 
 inline_for_extraction
 let parse32_fldata
@@ -12,21 +15,10 @@ let parse32_fldata
   (#p: parser k t)
   (p32: parser32 p)
   (sz: nat)
-  (sz32: U32.t { U32.v sz32 == sz } )
+  (sz32: I32.t { I32.v sz32 == sz } )
 : Tot (parser32 (parse_fldata p sz))
-= (fun (input: bytes32) -> ((
-    if U32.lt (B32.len input) sz32
-    then
-      None
-    else
-      match p32 (B32.b32slice input 0ul sz32) with
-      | Some (v, consumed) ->
-	if consumed = sz32
-	then begin
-	  Some (v, consumed)
-	end else None
-      | None -> None
-  ) <: (res: option (t * U32.t) { parser32_correct (parse_fldata p sz) input res } )))
+= fun input len ->
+  p32 (B.sub input 0ul (Cast.int32_to_uint32 sz32)) sz32
 
 inline_for_extraction
 let parse32_fldata_strong
@@ -36,19 +28,17 @@ let parse32_fldata_strong
   (s: serializer p)
   (p32: parser32 p)
   (sz: nat)
-  (sz32: U32.t { U32.v sz32 == sz } )
+  (sz32: I32.t { I32.v sz32 == sz } )
 : Tot (parser32 (parse_fldata_strong s sz))
-= (fun (input: bytes32) -> ((
-    match parse32_fldata p32 sz sz32 input with
-    | Some (v, consumed) ->
-      assert (
-        parse_fldata_strong_correct s sz (B32.reveal input) (U32.v consumed) v;
-        Seq.length (s v) == sz
-      );
-      Some ((v <: parse_fldata_strong_t s sz), consumed)
-    | None -> None
-    )   
-    <: (res: option (parse_fldata_strong_t s sz * U32.t) { parser32_correct (parse_fldata_strong s sz) input res } )))
+= fun input len -> 
+  let h = HST.get () in
+  match parse32_fldata p32 sz sz32 input len with
+    (v, consumed) ->
+    assert (
+      parse_fldata_strong_correct s sz (B.as_seq h input) (I32.v consumed) v;
+      Seq.length (s v) == sz
+    );
+    ((v <: parse_fldata_strong_t s sz), consumed)
 
 inline_for_extraction
 let serialize32_fldata_strong
@@ -56,10 +46,16 @@ let serialize32_fldata_strong
   (#t: Type0)
   (#p: parser k t)
   (#s: serializer p)
-  (s32: partial_serializer32 s)
-  (sz: nat { sz < 4294967296 } )
+  (s32: serializer32 s)
+  (sz: nat)
 : Tot (serializer32 (serialize_fldata_strong s sz))
-= (fun (input: parse_fldata_strong_t s sz) -> s32 input)
+= (fun output len lo (input: parse_fldata_strong_t s sz) ->
+    let hi = s32 output len lo input in
+    let h = HST.get () in
+    contains_valid_serialized_data_or_fail_equiv h s output lo input hi;
+    contains_valid_serialized_data_or_fail_equiv h (serialize_fldata_strong s sz) output lo input hi;
+    hi
+  )
 
 inline_for_extraction
 let size32_fldata_strong

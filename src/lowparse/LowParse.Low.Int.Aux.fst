@@ -8,6 +8,7 @@ module U8  = FStar.UInt8
 module U16 = FStar.UInt16
 module U32 = FStar.UInt32
 module B = LowStar.Buffer
+module Aux2 = LowParse.Low.Int.Aux2
 
 inline_for_extraction
 let parse32_u16 : parser32 parse_u16 =
@@ -38,6 +39,26 @@ let parse32_u8 : parser32 parse_u8 =
     (fun b -> B.index b 0ul)
 
 module HST = FStar.HyperStack.ST
+
+#push-options "--z3rlimit 16"
+
+inline_for_extraction
+let serialize32_u8' : serializer32' serialize_u8 =
+  fun out lo v ->
+  let h = HST.get () in
+  assert (Seq.length (serialize serialize_u8 v) == 1);
+  B.upd (B.sub out lo 1ul) 0ul v;
+  let h' = HST.get () in
+  Aux2.seq_equal_1 (B.as_seq h' (B.gsub out lo 1ul)) (serialize serialize_u8 v)
+
+#pop-options
+
+inline_for_extraction
+let serialize32_u8 : serializer32 serialize_u8 =
+  serializer32_of_serializer32' serialize32_u8'
+
+inline_for_extraction
+let serialize32_u8_fail = serializer32_fail_of_serializer #_ #_ #parse_u8 #serialize_u8 serialize32_u8 1l
 
 #push-options "--z3rlimit 32"
 

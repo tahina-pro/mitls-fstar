@@ -97,4 +97,7 @@ let validate_nochk32_enum_key
   (v: validator_nochk32 p)
   (e: enum key repr)
 : Tot (validator_nochk32 (parse_enum_key p e))
-= validate_nochk32_filter v (fun r -> list_mem r (list_map snd e))
+= validate_nochk32_synth
+    (validate_nochk32_filter v (parse_enum_key_filter e))
+    (parse_enum_key_synth e)
+    ()

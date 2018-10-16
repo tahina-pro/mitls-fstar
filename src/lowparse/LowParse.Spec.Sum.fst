@@ -295,8 +295,6 @@ let parse_sum_eq'
   ))
 = parse_tagged_union_eq #(parse_filter_kind kt) #(sum_key t) (parse_enum_key p (sum_enum t)) #(sum_type t) (sum_tag_of_data t) (parse_sum_cases t pc) input
 
-#reset-options
-
 let parse_sum_eq''
   (#kt: parser_kind)
   (t: sum)
@@ -321,6 +319,8 @@ let parse_sum_eq''
   ))
 = parse_sum_eq' t p pc input;
   parse_enum_key_eq p (sum_enum t) input
+
+#reset-options
 
 let parse_sum_eq
   (#kt: parser_kind)

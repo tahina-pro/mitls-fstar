@@ -1,27 +1,15 @@
 module LowParse.SLow.Base
-include LowParse.Spec.Base
+include LowParse.Low.Base
 
-module B32 = LowParse.Bytes32
+module B = LowStar.Buffer
+module M = LowStar.ModifiesPat
 module U32 = FStar.UInt32
-
-let bytes32 = B32.bytes
-
-let parser32_correct
-  (#k: parser_kind)
-  (#t: Type0)
-  (p: parser k t)
-  (input: bytes32)
-  (res: option (t * U32.t))
-: GTot Type0
-= let gp = parse p (B32.reveal input) in
-  match res with
-  | None -> gp == None
-  | Some (hres, consumed) ->
-    Some? gp /\ (
-      let (Some (hres' , consumed')) = gp in
-      hres == hres' /\
-      U32.v consumed == (consumed' <: nat)
-    )
+module HS = FStar.HyperStack
+module HST = FStar.HyperStack.ST
+module I32 = FStar.Int32
+module Cast = FStar.Int.Cast
+module MA = LowParse.Math
+module G = FStar.Ghost
 
 [@unifier_hint_injective]
 inline_for_extraction
@@ -30,38 +18,22 @@ let parser32
   (#t: Type0)
   (p: parser k t)
 : Tot Type0
-= (input: bytes32) -> Tot (res: option (t * U32.t) { parser32_correct p input res } )
-
-let parser32_consumes
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (input: bytes32)
-: Lemma
-  (Some? (p32 input) ==> (let (Some (_, consumed)) = p32 input in U32.v consumed <= B32.length input))
-= ()
-
-let parser32_consumes'
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (input: bytes32)
-: Lemma
-  (match p32 input with
-  | Some (_, consumed) -> U32.v consumed <= B32.length input
-  | _ -> True)
-= ()
-
-inline_for_extraction
-let make_parser32
-  (#k: parser_kind)
-  (#t: Type0)
-  (p: parser k t)
-  (p32: (input: bytes32) -> Pure (option (t * U32.t)) (requires True) (ensures (fun res -> parser32_correct p input res)))
-: Tot (parser32 p)
-= (fun (input: bytes32) -> (p32 input <: (res: option (t * U32.t) { parser32_correct p input res } )))
+= (input: buffer8) ->
+  (len: I32.t) ->
+  HST.Stack (t * I32.t) // NOTE: here we are using I32 because sometimes we need to call validators (see Option).
+  (requires (fun h ->
+    B.live h input /\
+    B.length input == I32.v len /\
+    Some? (parse p (B.as_seq h input))
+  ))
+  (ensures (fun h (res, consumed) h' ->
+    M.modifies M.loc_none h h' /\
+    B.live h' input /\ (
+    let ps = parse p (B.as_seq h input) in
+    let (Some (res', consumed')) = ps in
+    res == res' /\
+    I32.v consumed == consumed'
+  )))
 
 inline_for_extraction
 let coerce_parser32
@@ -74,48 +46,15 @@ let coerce_parser32
 : Tot (parser32 (coerce_parser t2 p))
 = p32
 
-let validator_correct
-  (#k: parser_kind)
-  (#t: Type0)
-  (p: parser k t)
-  (input: bytes32)
-  (res: option U32.t)
-: GTot Type0
-= let gp = parse p (B32.reveal input) in
-  match res with
-  | None -> gp == None
-  | Some (consumed) ->
-    Some? gp /\ (
-      let (Some (_ , consumed')) = gp in
-      U32.v consumed == (consumed' <: nat)
-    )
-
-let validator
-  (#k: parser_kind)
-  (#t: Type0)
-  (p: parser k t)
-: Tot Type0
-= (input: bytes32) -> Tot (res: option U32.t { validator_correct p input res } )
-
-let serializer32_correct
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (s: serializer p)
-  (input: t)
-  (res: bytes32)
-: GTot Type0
-= B32.reveal res == s input
-
 [@unifier_hint_injective]
 inline_for_extraction
 let serializer32
   (#k: parser_kind)
-  (#t: Type0)
+  (#t: Type)
   (#p: parser k t)
   (s: serializer p)
-: Tot Type0
-= (input: t) -> Tot (res: bytes32 { serializer32_correct s input res } )
+: Tot Type
+= serializer32_fail #k #t #p s
 
 inline_for_extraction
 let serialize32_ext
@@ -129,143 +68,13 @@ let serialize32_ext
   (p2: parser k2 t2)
   (u: squash (t1 == t2 /\ (forall (input: bytes) . parse p1 input == parse p2 input)))
 : Tot (serializer32 (serialize_ext p1 s1 p2))
-= fun input -> s1' input
-
-inline_for_extraction
-let partial_serializer32
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (s: serializer p)
-: Tot Type0
-= (input: t { Seq.length (s input) < 4294967296 } ) -> Tot (res: bytes32 { serializer32_correct s input res } )
-
-let serializer32_then_parser32
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (s: serializer p)
-  (p32: parser32 p)
-  (s32: serializer32 s)
-  (input: t)
-: Lemma
-  (p32 (s32 input) == Some (input, B32.len (s32 input)))
-= ()
-
-let parser32_then_serializer32
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (s: serializer p)
-  (p32: parser32 p)
-  (s32: serializer32 s)
-  (input: bytes32)
-: Lemma
-  (requires (Some? (p32 input)))
-  (ensures (
-    let (Some (v, consumed)) = p32 input in
-    U32.v consumed <= B32.length input /\
-    s32 v == B32.b32slice input 0ul consumed
-  ))
-= serializer_correct_implies_complete p s
-
-let parser32_then_serializer32'
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (#s: serializer p)
-  (p32: parser32 p)
-  (s32: serializer32 s)
-  (input: bytes32)
-  (v: t)
-  (consumed: U32.t)
-: Lemma
-  (requires (p32 input == Some (v, consumed)))
-  (ensures (
-    B32.length (s32 v) == U32.v consumed /\
-    U32.v consumed <= B32.length input /\
-    B32.reveal (s32 v) == Seq.slice (B32.reveal input) 0 (U32.v consumed)
-  ))
-= parser32_then_serializer32 s p32 s32 input
-
-let parser32_injective
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (input1 input2: bytes32)
-: Lemma
-  (requires (
-    let p1 = p32 input1 in
-    let p2 = p32 input2 in
-    Some? p1 /\
-    Some? p2 /\ (
-    let (Some (v1, _)) = p1 in
-    let (Some (v2, _)) = p2 in
-    v1 == v2
-  )))
-  (ensures (
-    let p1 = p32 input1 in
-    let p2 = p32 input2 in
-    Some? p1 /\
-    Some? p2 /\ (
-    let (Some (v1, consumed1)) = p1 in
-    let (Some (v2, consumed2)) = p2 in
-    v1 == v2 /\
-    consumed1 == consumed2 /\
-    U32.v consumed1 <= B32.length input1 /\
-    U32.v consumed2 <= B32.length input2 /\
-    B32.b32slice input1 0ul consumed1 == B32.b32slice input2 0ul consumed2
-  )))
-= assert (injective_precond p (B32.reveal input1) (B32.reveal input2));
-  assert (injective_postcond p (B32.reveal input1) (B32.reveal input2))
-
-let serializer32_injective
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (s: serializer p)
-  (s32: serializer32 s)
-  (input1 input2: t)
-: Lemma
-  (requires (s32 input1 == s32 input2))
-  (ensures (input1 == input2))
-= ()
-
-let parse32_size
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (input: bytes32)
-  (data: t)
-  (consumed: U32.t)
-: Lemma
-  (requires (p32 input == Some (data, consumed)))
-  (ensures (
-    k.parser_kind_low <= U32.v consumed /\ (
-    Some? k.parser_kind_high ==> (
-    let (Some hi) = k.parser_kind_high in
-    U32.v consumed <= hi
-  ))))
-= ()
-
-let parse32_total
-  (#k: parser_kind)
-  (#t: Type0)
-  (#p: parser k t)
-  (p32: parser32 p)
-  (input: bytes32)
-: Lemma
-  (requires (
-    k.parser_kind_high == Some k.parser_kind_low /\
-    k.parser_kind_metadata.parser_kind_metadata_total == true /\
-    k.parser_kind_low <= B32.length input
-  ))
-  (ensures (
-    Some? (p32 input)
-  ))
-= ()
+= fun b len lo v -> 
+  let h = HST.get () in
+  let res = s1' b len lo v in
+  let h' = HST.get () in
+  contains_valid_serialized_data_or_fail_equiv h' s1 b lo v res;
+  contains_valid_serialized_data_or_fail_equiv h' (serialize_ext p1 s1 p2) b lo v res;
+  res
   
 inline_for_extraction
 let u32_max : (y: U32.t { forall (x: U32.t) . U32.v x <= U32.v y } ) =
