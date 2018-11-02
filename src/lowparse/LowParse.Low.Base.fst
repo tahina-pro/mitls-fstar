@@ -228,6 +228,115 @@ let validator_nochk32
     U32.v res == res'
   )))
 
+noeq
+type pbuffer (#k: parser_kind) (#t: Type0) (p: parser k t) =
+  | PBuffer of buffer8
+
+let valid_pbuffer' (#k: parser_kind) (#t: Type0) (#p: parser k t) (h: HS.mem) (b: pbuffer p) : GTot Type0 =
+  let PBuffer b0 = b in
+  B.live h b0 /\
+  (~ (B.g_is_null b0)) /\
+  Some? (parse p (B.as_seq h b0))
+
+abstract let valid_pbuffer (#k: parser_kind) (#t: Type0) (#p: parser k t) (h: HS.mem) (b: pbuffer p) : GTot Type0 = valid_pbuffer' h b
+
+abstract let valid_pbuffer_equiv (#k: parser_kind) (#t: Type0) (#p: parser k t) (h: HS.mem) (b: pbuffer p) : Lemma (valid_pbuffer h b <==> valid_pbuffer' h b) = ()
+
+let null_pbuffer' (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p) : GTot Type0 =
+  let PBuffer b0 = b in
+  B.g_is_null b0
+
+abstract let null_pbuffer (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p) : GTot Type0 = null_pbuffer' b
+
+abstract let null_pbuffer_equiv (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p) : Lemma (null_pbuffer b <==> null_pbuffer' b) = ()
+
+abstract
+let valid_pbuffer_not_null (#k: parser_kind) (#t: Type0) (#p: parser k t) (h: HS.mem) (b: pbuffer p) : Lemma
+  ((valid_pbuffer h b /\ null_pbuffer b) ==> False)
+= ()
+
+let pbuffer_is_null (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p) : HST.Stack bool
+  (requires (fun h -> valid_pbuffer h b \/ null_pbuffer b))
+  (ensures (fun h res h' ->
+    h' == h /\ (
+    if res
+    then null_pbuffer b
+    else valid_pbuffer h b
+  )))
+= let h = HST.get () in
+  [@inline_let]
+  let _ = valid_pbuffer_equiv h b; null_pbuffer_equiv b in
+  match b with
+  | PBuffer b0 -> B.is_null b0
+
+let pbuffer_as_val' (#k: parser_kind) (#t: Type0) (#p: parser k t) (h: HS.mem) (b: pbuffer p) : Ghost t
+  (requires (valid_pbuffer h b))
+  (ensures (fun _ -> True))
+= let PBuffer b0 = b in
+  let (Some (v, _)) = parse p (B.as_seq h b0) in
+  v
+
+abstract let pbuffer_as_val (#k: parser_kind) (#t: Type0) (#p: parser k t) (h: HS.mem) (b: pbuffer p) : Ghost t
+  (requires (valid_pbuffer h b))
+  (ensures (fun _ -> True))
+= pbuffer_as_val' h b
+
+abstract
+let pbuffer_as_val_eq (#k: parser_kind) (#t: Type0) (#p: parser k t) (h: HS.mem) (b: pbuffer p) : Lemma
+  (requires (valid_pbuffer h b))
+  (ensures (pbuffer_as_val h b == pbuffer_as_val' h b))
+= ()
+
+let loc_pbuffer' (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p) : GTot B.loc =
+  let PBuffer b0 = b in
+  B.loc_buffer b0
+
+abstract
+let loc_pbuffer (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p) : GTot B.loc = loc_pbuffer' b
+
+abstract
+let loc_pbuffer_eq (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p) : Lemma
+  (loc_pbuffer b == loc_pbuffer' b)
+= ()
+
+let loc_includes_union_l_pbuffer
+  (l1 l2: B.loc)
+  (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p)
+: Lemma
+  (requires (l1 `B.loc_includes` loc_pbuffer b \/ l2 `B.loc_includes` loc_pbuffer b))
+  (ensures ((l1 `B.loc_union` l2) `B.loc_includes` loc_pbuffer b))
+  [SMTPat ((l1 `B.loc_union` l2) `B.loc_includes` loc_pbuffer b)]
+= B.loc_includes_union_l l1 l2 (loc_pbuffer b)
+
+let make_pbuffer
+  (#k: parser_kind)
+  (#t: Type0)
+  (#p: parser k t)
+  (v: validator32 p)
+  (b: buffer8)
+  (sz: I32.t)
+: HST.Stack (pbuffer p)
+  (requires (fun h -> B.live h b /\ I32.v sz == B.length b /\ (~ (B.g_is_null b))))
+  (ensures (fun h res h' ->
+    B.modifies B.loc_none h h' /\ (
+    match parse p (B.as_seq h b) with
+    | Some (v, _) ->
+      valid_pbuffer h' res /\
+      B.loc_buffer b `B.loc_includes` loc_pbuffer res /\
+      pbuffer_as_val h' res == v
+    | None ->
+      null_pbuffer res
+  )))
+= if v b sz `I32.lt` 0l
+  then PBuffer B.null
+  else PBuffer b
+
+abstract let valid_pbuffer_inv (#k: parser_kind) (#t: Type0) (#p: parser k t) (b: pbuffer p) (l: B.loc) (h h' : HS.mem) : Lemma
+  (requires (valid_pbuffer h b /\ B.modifies l h h' /\ B.loc_disjoint l (loc_pbuffer b)))
+  (ensures (valid_pbuffer h' b /\ pbuffer_as_val h' b == pbuffer_as_val h b))
+= ()
+
+[@unifier_hint_injective]
 inline_for_extraction
 let accessor
   (#k1: parser_kind)
@@ -238,46 +347,99 @@ let accessor
   (p2: parser k2 t2)
   (rel: (t1 -> t2 -> GTot Type0))
 : Tot Type
-= (input: buffer8) ->
-  HST.Stack buffer8
-  (requires (fun h ->
-    B.live h input /\
-    Some? (parse p1 (B.as_seq h input))
-  ))
+= (input: pbuffer p1) ->
+  HST.Stack (pbuffer p2)
+  (requires (fun h -> valid_pbuffer h input))
   (ensures (fun h res h' ->
     M.modifies (M.loc_none) h h' /\
-    B.live h' input /\
-    B.includes input res /\ (
-    let Some (x1, _) = parse p1 (B.as_seq h input) in
-    let ps2 = parse p2 (B.as_seq h res) in
-    Some? ps2 /\ (
-    let Some (x2, _) = ps2 in
-    rel x1 x2
-  ))))
+    valid_pbuffer h' res /\
+    rel (pbuffer_as_val h input) (pbuffer_as_val h' res) /\
+    B.loc_includes (loc_pbuffer input) (loc_pbuffer res)
+  ))
+
+[@unifier_hint_injective]
+inline_for_extraction
+let accessor'
+  (#k1: parser_kind)
+  (#t1: Type)
+  (p1: parser k1 t1)
+  (#k2: parser_kind)
+  (#t2: Type)
+  (p2: parser k2 t2)
+  (rel: (t1 -> t2 -> GTot Type0))
+: Tot Type
+= 
+    (input: buffer8) ->
+    HST.Stack (buffer8)
+    (requires (fun h ->
+      let input' : pbuffer p1 = PBuffer input in
+      valid_pbuffer' h input'
+    ))
+    (ensures (fun h res h' ->
+      let input' : pbuffer p1 = PBuffer input in
+      let res' : pbuffer p2 = PBuffer res in
+      M.modifies (M.loc_none) h h' /\
+      valid_pbuffer' h' res' /\
+      rel (pbuffer_as_val' h input') (pbuffer_as_val' h' res') /\
+      B.loc_includes (loc_pbuffer' input') (loc_pbuffer' res')
+    ))
+
+inline_for_extraction
+let mk_accessor
+  (#k1: parser_kind)
+  (#t1: Type)
+  (p1: parser k1 t1)
+  (#k2: parser_kind)
+  (#t2: Type)
+  (p2: parser k2 t2)
+  (rel: (t1 -> t2 -> GTot Type0))
+  (f: accessor' p1 p2 rel)
+: Tot (accessor p1 p2 rel)
+= fun input ->
+    match input with
+    | PBuffer input' ->
+      let h = HST.get () in
+      let res = f input' in
+      PBuffer res
+
+inline_for_extraction
+let conditional_accessor
+  (#k1: parser_kind)
+  (#t1: Type)
+  (p1: parser k1 t1)
+  (#k2: parser_kind)
+  (#t2: Type)
+  (p2: parser k2 t2)
+  (pre: (t1 -> GTot Type0))
+  (rel: (t1 -> t2 -> GTot Type0))
+: Tot Type
+= (input: pbuffer p1) ->
+  HST.Stack (pbuffer p2)
+  (requires (fun h -> valid_pbuffer h input /\ pre (pbuffer_as_val h input)))
+  (ensures (fun h res h' ->
+    M.modifies (M.loc_none) h h' /\
+    valid_pbuffer h' res /\
+    rel (pbuffer_as_val h input) (pbuffer_as_val h' res) /\
+    B.loc_includes (loc_pbuffer input) (loc_pbuffer res)
+  ))
 
 inline_for_extraction
 let read_from_buffer
-  (#k1: parser_kind)
-  (#t1: Type)
-  (#p1: parser k1 t1)
   (#k2: parser_kind)
   (#t2: Type)
   (#p2: parser k2 t2)
-  (#rel: (t1 -> t2 -> GTot Type0))
-  (a12: accessor p1 p2 rel)
   (p2' : parser32 p2)
-  (input: buffer8)
+  (input: pbuffer p2)
 : HST.Stack t2
   (requires (fun h ->
-    B.live h input /\
-    Some? (parse p1 (B.as_seq h input))
+    valid_pbuffer h input
   ))
   (ensures (fun h y h' ->
-    M.modifies M.loc_none h h' /\ (
-    let (Some (x, _)) = parse p1 (B.as_seq h input) in
-    rel x y
-  )))
-= p2' (a12 input)
+    M.modifies M.loc_none h h' /\
+    y == pbuffer_as_val h input
+  ))
+= match input with
+  | PBuffer b -> p2' b
 
 let exactly_contains_valid_data'
   (#k: parser_kind)

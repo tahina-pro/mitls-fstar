@@ -45,11 +45,11 @@ let read_byte
 #set-options "--z3rlimit 16"
 
 inline_for_extraction
-let slice_bytes
+let slice_bytes'
   (sz: nat { sz < 4294967296 } )
   (i: U32.t)
   (sz' : U32.t { U32.v i + U32.v sz' <= sz } )
-: Tot (accessor (parse_flbytes sz) (parse_flbytes (U32.v sz')) (fun x y -> y == BY.slice x i (U32.add i sz')))
+: Tot (accessor' (parse_flbytes sz) (parse_flbytes (U32.v sz')) (fun x y -> y == BY.slice x i (U32.add i sz')))
 = fun input ->
   B.sub input i sz'
 

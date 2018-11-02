@@ -171,9 +171,7 @@ let accessor_synth
   (f: t1 -> GTot t2)
   (u: unit {  synth_injective f } )
 : Tot (accessor (parse_synth p1 f) p1 (fun x y -> f y == x))
-= fun input ->
-  let h = HST.get () in // FIXME: WHY WHY WHY?
-  input
+= mk_accessor (parse_synth p1 f) p1 (fun x y -> f y == x) (fun x -> let _ = HST.get () in x)
 
 inline_for_extraction
 val nondep_then_fst
@@ -185,9 +183,11 @@ val nondep_then_fst
   (p2: parser k2 t2)
 : Tot (accessor (p1 `nondep_then` p2) p1 (fun x y -> y == fst x))
 
-let nondep_then_fst #k1 #t1 p1 #k2 #t2 p2 input =
-  let h = HST.get () in // FIXME: WHY WHY WHY?
-  input
+let nondep_then_fst #k1 #t1 p1 #k2 #t2 p2 =
+  mk_accessor (p1 `nondep_then` p2) p1 (fun x y -> y == fst x) (fun input ->
+    let h = HST.get () in // FIXME: WHY WHY WHY?
+    input
+  )
 
 inline_for_extraction
 val nondep_then_snd
@@ -201,8 +201,10 @@ val nondep_then_snd
 : Tot (accessor (p1 `nondep_then` p2) p2 (fun x y -> y == snd x))
 
 #push-options "--z3rlimit 50"
-let nondep_then_snd #k1 #t1 #p1 p1' #k2 #t2 p2 input =
-  B.offset input (p1' input)
+let nondep_then_snd #k1 #t1 #p1 p1' #k2 #t2 p2 =
+  mk_accessor (p1 `nondep_then` p2) p2 (fun x y -> y == snd x) (fun input ->
+    B.offset input (p1' input)
+  )
 #pop-options
 
 inline_for_extraction

@@ -118,6 +118,27 @@ let validate32_bounded_vldata_strong
 #set-options "--z3rlimit 64"
 
 inline_for_extraction
+let accessor_bounded_vldata_payload'
+  (min: nat)
+  (max: nat)
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (sz32: U32.t)
+  (u: unit {
+    min <= max /\ max > 0 /\ max < 4294967296 /\
+    U32.v sz32 == log256' max
+  })
+: Tot (accessor' (parse_bounded_vldata min max p) p (fun x y -> y == x))
+= [@inline_let]
+  let sz = log256' max in
+  fun input ->
+    let h = HST.get () in
+    parse_bounded_vldata_elim_forall min max p (B.as_seq h input);
+    let len = parse32_bounded_integer sz input in
+    B.sub (B.offset input sz32) 0ul len
+
+inline_for_extraction
 let accessor_bounded_vldata_payload
   (min: nat)
   (max: nat)
@@ -130,13 +151,7 @@ let accessor_bounded_vldata_payload
     U32.v sz32 == log256' max
   })
 : Tot (accessor (parse_bounded_vldata min max p) p (fun x y -> y == x))
-= [@inline_let]
-  let sz = log256' max in
-  fun input ->
-  let h = HST.get () in
-  parse_bounded_vldata_elim_forall min max p (B.as_seq h input);
-  let len = parse32_bounded_integer sz input in
-  B.sub (B.offset input sz32) 0ul len
+= mk_accessor _ _ _ (accessor_bounded_vldata_payload' min max p sz32 u)
 
 inline_for_extraction
 let accessor_bounded_vldata_strong_payload
@@ -152,7 +167,7 @@ let accessor_bounded_vldata_strong_payload
     U32.v sz32 == log256' max
   })
 : Tot (accessor (parse_bounded_vldata_strong min max s) p (fun x y -> y == x))
-= fun input -> accessor_bounded_vldata_payload min max p sz32 () input
+= mk_accessor _ _ _ (fun input -> accessor_bounded_vldata_payload' min max p sz32 () input)
 
 #reset-options
 

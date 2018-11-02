@@ -63,6 +63,18 @@ let validate_nochk32_fldata_strong
 = validate_nochk32_constant_size (parse_fldata_strong s sz) sz32 ()
 
 inline_for_extraction
+let accessor_fldata'
+  (#k: parser_kind)
+  (#t: Type0)
+  (p: parser k t)
+  (sz: nat)
+  (sz32: U32.t { U32.v sz32 == sz } )
+: Tot (accessor' (parse_fldata p sz) p (fun x y -> x == y))
+= fun x ->
+    let h = HST.get () in // TODO: WHY WHY WHY is this necessary?
+    B.sub x 0ul sz32
+
+inline_for_extraction
 let accessor_fldata
   (#k: parser_kind)
   (#t: Type0)
@@ -70,9 +82,7 @@ let accessor_fldata
   (sz: nat)
   (sz32: U32.t { U32.v sz32 == sz } )
 : Tot (accessor (parse_fldata p sz) p (fun x y -> x == y))
-= fun x ->
-  let h = HST.get () in // TODO: WHY WHY WHY is this necessary?
-  B.sub x 0ul sz32
+= mk_accessor (parse_fldata p sz) p (fun x y -> x == y) (accessor_fldata' p sz sz32)
 
 inline_for_extraction
 let accessor_fldata_strong
@@ -83,5 +93,4 @@ let accessor_fldata_strong
   (sz: nat)
   (sz32: U32.t { U32.v sz32 == sz } )
 : Tot (accessor (parse_fldata_strong s sz) p (fun x y -> x == y))
-= fun x -> accessor_fldata p sz sz32 x
-
+= mk_accessor (parse_fldata_strong s sz) p (fun x y -> x == y) (fun x -> accessor_fldata' p sz sz32 x)

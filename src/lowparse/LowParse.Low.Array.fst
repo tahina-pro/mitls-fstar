@@ -45,7 +45,7 @@ let rec list_nth_constant_size_parser_correct #k #t p b i =
   end
 
 inline_for_extraction
-val array_nth
+val array_nth'
   (#k: parser_kind)
   (#t: Type0)
   (#p: parser k t)
@@ -61,13 +61,13 @@ val array_nth
     U32.v array_byte_size32 == array_byte_size /\
     U32.v i < elem_count
   })
-: Tot (accessor (parse_array s array_byte_size elem_count) p (fun x y -> y == L.index x (U32.v i)))
+: Tot (accessor' (parse_array s array_byte_size elem_count) p (fun x y -> y == L.index x (U32.v i)))
 
 module B = LowStar.Buffer
 
 #set-options "--z3rlimit 16"
 
-let array_nth #k #t #p s array_byte_size elem_count array_byte_size32 elem_byte_size32 i u =
+let array_nth' #k #t #p s array_byte_size elem_count array_byte_size32 elem_byte_size32 i u =
   fun input ->
   let h = HST.get () in
   list_nth_constant_size_parser_correct p (B.as_seq h (gsub input 0ul array_byte_size32)) (U32.v i);
