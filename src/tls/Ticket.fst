@@ -11,8 +11,6 @@ open TLSInfo
 
 module AE = AEADProvider
 
-#set-options "--admit_smt_queries true"
-
 val discard: bool -> ST unit
   (requires (fun _ -> True))
   (ensures (fun h0 _ h1 -> h0 == h1))
@@ -30,6 +28,7 @@ type tlabel (h:hostname) = t:bytes * tls13:bool
 noextract
 private let region:rgn = new_region tls_tables_region
 
+noeq
 type ticket_key =
   | Key: i:AE.id -> wr:AE.writer i -> rd:AE.reader i -> ticket_key
 
@@ -201,11 +200,102 @@ let check_ticket (seal:bool) (b:bytes{length b <= 65551}) : St (option ticket) =
       let nonce, _ = split b 12ul in
       parse plain nonce
 
-let serialize = function
-  | Ticket12 pv cs ems _ ms ->
+(* BEGIN added by hand *)
+
+module LL = LowParse.Low.Base
+
+val ticketContents_validator32: LL.validator32 ticketContents_parser
+
+val ticketContents_access_tag: LL.accessor ticketContents_parser ticketVersion_parser (fun x y -> y == tag_of_ticketContents x)
+
+val ticketContents_access_contents12: LL.accessor ticketContents_parser ticketContents12_parser (fun x y -> match x with Case_ticket12 y' -> y == y' | _ -> True)
+
+val ticketContents_access_contents13: LL.accessor ticketContents_parser ticketContents13_parser (fun x y -> match x with Case_ticket13 y' -> y == y' | _ -> True)
+
+module HST = FStar.HyperStack.ST
+
+val ticketContents_contents12 (base: LL.slice) (off: U32.t) : HST.Stack unit
+  (requires (fun h ->
+    U32.v off < 4294967295 /\
+    LL.valid h base (U32.add off 1ul) ticketContents12_parser))
+  (ensures (fun h _ h' ->
+    B.modifies (B.gsub base off (U32.sub (B.len base) off)) h h' /\
+    LL.valid h' base off ticketContents_parser /\
+    LL.contents h' base off ticketContents_parser == Case_ticket12 (LL.contents h base (U32.add off 1ul) ticketContents12_parser)
+  ))
+
+(* END added by hand *)
+
+val serialize
+  (out: slice)
+  (pos: U32.t { pos <= out.len })
+  (t: ticketContents)
+: HST.Stack (result pos)
+  (requires (fun h -> live_slice h out))
+  (ensures (fun h res h' ->
+    B.modifies (loc_slice_from out pos) h h' /\
+    live_slice h' out /\
+    match res with
+    | Correct pos' ->
+
+      valid_contents_len h' out pos ticketContents_serializer t pos'
+(* defined as unfold valid_contents_len = 
+      valid h' out pos ticketContents_parser /\
+      contents h' out pos ticketContents_parser == t /\
+      U32.v pos + content_length h' out pos ticketContents_serializer == U32.v pos'
+// length (serialize ticketContent_serializer (contents h' out pos ticketContents_parser))
+*)
+    | Error _ ->
+      U32.v pos + size ticketContents_serializer t > U32.v out.len
+// length (serialize ticketContents_serializer t)
+  ))
+
+let serialize (out: slice) pos = function
+  | Case_ticket12 t12 ->
+(*  
     (versionBytes pv) @| (cipherSuiteNameBytes (name_of_cipherSuite cs))
     @| abyte (if ems then 1z else 0z) @| (vlbytes 2 ms)
-  | Ticket13 cs _ _ rms _ created age custom ->
+*)
+
+    
+
+    if out.len - pos < 1 + ticketContents12_len then
+      Error "cannot serialize ticket12"
+    else begin
+      let pos1 = U32.add pos 1ul in
+(* By hand *)
+      let pos2 = protocolVersion_serializer32 out pos1 t12.pv in
+      let pos3 = cipherSuite_serializer32 out pos2 t12.cs in
+      let pos4 = bool_serializer32 out pos3 t12.ems in
+      let pos5 = LP.serialize32_flbytes 48ul out pos4 t12.master_secret in
+      ticketContents12_serialize_lemma out pos1;
+(* Using default emitter *)
+      push_frame();
+      let tmp = alloca 0uy 48ul in
+      store_bytes t12.ms tmp;
+      let pos5 = emit_ticketContents12 out pos1 t12.pv t12.cs t12.ems tmp in
+      pop_frame();
+      
+      ticketContents_contents12 out pos pos5
+    end
+
+  | Case_ticket13 t13 ->
+    if out.len - pos < 1 then
+      Error "cannot serialize ticket13 tag"
+    else begin
+      let pos1 = U32.add pos 1ul in
+      push_frame ();
+      let tmp_vl_rms = vlbuffer_of_bytes 32ul 255ul t13.rms in
+      let tmp_vl_nonce = vlbuffer_of_bytes 0ul 255ul t13.nonce in
+      let tmp_vl_custom_data = vlbuffer_of_bytes 0ul 65535ul t13.custom_data in
+      let pos2 = emit_ticketContents13 out pos1 t13.cs tmp_vl_rms tmp_vl_nonce t13.creation_time t13.age_add tmp_vl_custom_data in
+      pop_frame ();
+      if pos2 = max_uint32
+      then max_uint32
+      else ticketContents_contents13 out pos pos2
+    end
+    
+
     (versionBytes TLS_1p3) @| (cipherSuiteNameBytes (name_of_cipherSuite cs))
     @| (bytes_of_int32 created) @| (bytes_of_int32 age)
     @| (vlbytes 2 custom) @| (vlbytes 2 rms)
@@ -220,7 +310,16 @@ let ticket_encrypt (seal:bool) plain : St bytes =
 
 let create_ticket (seal:bool) t =
   let plain = serialize t in
+  let len_t = ticketContents_size32 t in
+  assert (len_t < max_int); // ticketContents_parser_kind
+  push_frame ();
+  let out = alloca 0uy len_t in
+  let res = serialize ({ base = out; len = len_t; }) 0ul t in
+  assert (res == len_t);
+  let plain = FStar.Bytes.of_buffer len_t out in
+  pop_frame ();
   ticket_encrypt seal plain
+
 
 let create_cookie (hrr:HandshakeMessages.hrr) (digest:bytes) (extra:bytes) =
   let hrm = HandshakeMessages.HelloRetryRequest hrr in
