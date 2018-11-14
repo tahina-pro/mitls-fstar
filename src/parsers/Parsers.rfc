@@ -806,6 +806,7 @@ Dumped from https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
 
 enum /*@open*/ {
   TLS_NULL_WITH_NULL_NULL(0x0000),
+/*  
   TLS_RSA_WITH_NULL_MD5(0x0001),
   TLS_RSA_WITH_NULL_SHA(0x0002),
   TLS_RSA_WITH_RC4_128_MD5(0x0004),
@@ -865,6 +866,7 @@ enum /*@open*/ {
   TLS_PSK_WITH_CHACHA20_POLY1305_SHA256(0xCCAB),
   TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256(0xCCAC),
   TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256(0xCCAD),
+*/
 /* the following cipher suites are not supported (no matching in cipherSuite_of_name)
   TLS_RSA_EXPORT_WITH_RC4_40_MD5(0x0003),
   TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5(0x0006),
@@ -1380,7 +1382,33 @@ struct {
   CipherSuite cs;
   boolean ems;
   opaque master_secret[48];
+  uint32 foo1;
+  uint32 foo2;
 } TicketContents12;
+
+
+struct {
+  ProtocolVersion pv;
+  CipherSuite cs;
+  boolean ems;
+  opaque master_secret[48];
+  uint32 foo1;
+} TicketContents11;
+
+
+struct {
+  ProtocolVersion pv;
+  CipherSuite cs;
+  boolean ems;
+  opaque master_secret[48];
+} TicketContents10;
+
+struct {
+  ProtocolVersion pv;
+  CipherSuite cs;
+  uint32 ems;
+  opaque master_secret[48];
+} TicketContents9;
 
 struct {
   CipherSuite cs;

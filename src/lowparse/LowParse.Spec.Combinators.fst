@@ -909,7 +909,7 @@ let synth_injective
   (#t2: Type0)
   (f: (t1 -> GTot t2))
 : GTot Type0
-= forall (x x' : t1) . f x == f x' ==> x == x'
+= forall (x x' : t1) . {:pattern f x ; f x'} f x == f x' ==> x == x'
 
 let synth_injective_intro
   (#t1: Type0)
