@@ -273,7 +273,7 @@ let write_ticket12 (t: ticket) (sl: LPB.slice) (pos: U32.t) : Stack U32.t
       PTL.finalize_case_ticketContents12 sl pos
     end
 
-// #reset-options "--max_fuel 0 --initial_fuel 0 --max_ifuel 1 --initial_ifuel 1 --z3rlimit 64 --z3cliopt smt.arith.nl=false --z3cliopt trace=true --z3refresh --using_facts_from '* -FStar.Tactics -FStar.Reflection' --log_queries"
+#reset-options "--max_fuel 0 --initial_fuel 0 --max_ifuel 1 --initial_ifuel 1 --z3rlimit 64 --z3cliopt smt.arith.nl=false --z3refresh --using_facts_from '* -FStar.Tactics -FStar.Reflection -LowStar.Monotonic.Buffer.modifies_trans' --log_queries --print_z3_statistics"
 
 module HS = FStar.HyperStack
 
@@ -318,12 +318,17 @@ let emit_ticket13
         })
         pos'
   )))
-= let len_rms = LPB.jump_bounded_vlbytes 32 255 rms 0ul in
+=
+  let h0 = get () in
+  let len_rms = LPB.jump_bounded_vlbytes 32 255 rms 0ul in
   let len_nonce = LPB.jump_bounded_vlbytes 0 255 nonce 0ul in
   let len_custom_data = LPB.jump_bounded_vlbytes 0 65535 custom_data 0ul in
   if (out.LPB.len `U32.sub` pos) `U32.lt` (10ul `U32.add` len_rms `U32.add` len_nonce `U32.add` len_custom_data)
-  then LPB.max_uint32
-  else begin
+  then begin
+    let h = get () in
+    B.modifies_linear_elim (LPB.loc_slice_from out pos) h0 h;
+    LPB.max_uint32
+  end else begin
       let pos2 = PTL.write_cipherSuite cs out pos in
       let pos3 = LPB.copy_strong (LPB.parse_bounded_vlbytes 32 255) rms 0ul len_rms out pos2 in
       let pos4 = LPB.copy_strong (LPB.parse_bounded_vlbytes 0 255) nonce 0ul len_nonce out pos3 in
@@ -332,6 +337,7 @@ let emit_ticket13
       let pos7 = LPB.copy_strong (LPB.parse_bounded_vlbytes 0 65535) custom_data 0ul len_custom_data out pos6 in
       let h = get () in
       PTL.valid_ticketContents13_intro h out pos;
+      B.modifies_linear_elim (LPB.loc_slice_from out pos) h0 h;
       pos7
     end
 
