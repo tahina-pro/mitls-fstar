@@ -83,16 +83,16 @@ let valid_vldata_gen_elim
     sz + U32.v len_payload == content_length (parse_vldata_gen sz f p) h input pos /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
     valid_pos (parse_vldata_gen sz f p) h input pos (pos_payload `U32.add` len_payload) /\
-    valid_exact p h input pos_payload (pos_payload `U32.add` len_payload) /\
-    contents_exact p h input pos_payload (pos_payload `U32.add` len_payload) == contents (parse_vldata_gen sz f p) h input pos
+    valid_exact p h input.base pos_payload (pos_payload `U32.add` len_payload) /\
+    contents_exact p h input.base pos_payload (pos_payload `U32.add` len_payload) == contents (parse_vldata_gen sz f p) h input pos
   ))))
 = valid_facts (parse_vldata_gen sz f p) h input pos;
   valid_facts (parse_bounded_integer sz) h input pos;
   parse_vldata_gen_eq sz f p (B.as_seq h (B.gsub input.base pos (input.len `U32.sub` pos)));
   let len_payload = contents (parse_bounded_integer sz) h input pos in
   let pos_payload = pos `U32.add` U32.uint_to_t sz in
-  valid_exact_equiv p h input pos_payload (pos_payload `U32.add` len_payload);
-  contents_exact_eq p h input pos_payload (pos_payload `U32.add` len_payload)
+  valid_exact_equiv p h input.base pos_payload (pos_payload `U32.add` len_payload);
+  contents_exact_eq p h input.base pos_payload (pos_payload `U32.add` len_payload)
 
 #pop-options
 
@@ -233,7 +233,7 @@ let valid_vldata_gen_intro
   (requires (
     U32.v pos + sz <= U32.v input.len /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
-    valid_exact p h input pos_payload pos' /\ (
+    valid_exact p h input.base pos_payload pos' /\ (
     let len_payload = pos' `U32.sub` pos_payload in
     bounded_integer_prop sz len_payload /\
     f len_payload == true /\
@@ -241,12 +241,12 @@ let valid_vldata_gen_intro
     contents (parse_bounded_integer sz) h input pos == len_payload
   ))))
   (ensures (
-    valid_content_pos (parse_vldata_gen sz f p) h input pos (contents_exact p h input (pos `U32.add` U32.uint_to_t sz) pos') pos'
+    valid_content_pos (parse_vldata_gen sz f p) h input pos (contents_exact p h input.base (pos `U32.add` U32.uint_to_t sz) pos') pos'
   ))
 = valid_facts (parse_vldata_gen sz f p) h input pos;
   valid_facts (parse_bounded_integer sz) h input pos;
   parse_vldata_gen_eq sz f p (B.as_seq h (B.gsub input.base pos (input.len `U32.sub` pos)));
-  contents_exact_eq p h input (pos `U32.add` U32.uint_to_t sz) pos'
+  contents_exact_eq p h input.base (pos `U32.add` U32.uint_to_t sz) pos'
 
 #pop-options
 
@@ -264,14 +264,14 @@ let finalize_vldata_gen
   (requires (fun h ->
     U32.v pos + sz <= U32.v input.len /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
-    valid_exact p h input pos_payload pos' /\ (
+    valid_exact p h input.base pos_payload pos' /\ (
     let len_payload = pos' `U32.sub` pos_payload in
     bounded_integer_prop sz len_payload /\
     f len_payload == true
   ))))
   (ensures (fun h _ h' ->
-    B.modifies (loc_slice_from_to input pos (pos `U32.add` U32.uint_to_t sz)) h h' /\
-    valid_content_pos (parse_vldata_gen sz f p) h' input pos (contents_exact p h input (pos `U32.add` U32.uint_to_t sz) pos') pos'
+    B.modifies (loc_slice_from_to input.base pos (pos `U32.add` U32.uint_to_t sz)) h h' /\
+    valid_content_pos (parse_vldata_gen sz f p) h' input pos (contents_exact p h input.base (pos `U32.add` U32.uint_to_t sz) pos') pos'
   ))
 = [@inline_let]
   let len_payload = pos' `U32.sub` (pos `U32.add` U32.uint_to_t sz) in
@@ -300,8 +300,8 @@ let valid_bounded_vldata_elim
     sz + U32.v len_payload == content_length (parse_bounded_vldata min max p) h input pos /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
     valid_pos (parse_bounded_vldata min max p) h input pos (pos_payload `U32.add` len_payload) /\
-    valid_exact p h input pos_payload (pos_payload `U32.add` len_payload) /\
-    contents_exact p h input pos_payload (pos_payload `U32.add` len_payload) == contents (parse_bounded_vldata min max p) h input pos
+    valid_exact p h input.base pos_payload (pos_payload `U32.add` len_payload) /\
+    contents_exact p h input.base pos_payload (pos_payload `U32.add` len_payload) == contents (parse_bounded_vldata min max p) h input pos
   ))))
 = valid_facts (parse_bounded_vldata min max p) h input pos;
   let sz = log256' max in
@@ -323,7 +323,7 @@ let valid_bounded_vldata_intro
     let sz = log256' max in
     U32.v pos + sz <= U32.v input.len /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
-    valid_exact p h input pos_payload pos' /\ (
+    valid_exact p h input.base pos_payload pos' /\ (
     let len_payload = pos' `U32.sub` pos_payload in
     min <= U32.v len_payload /\ U32.v len_payload <= max /\
     valid (parse_bounded_integer sz) h input pos /\
@@ -331,7 +331,7 @@ let valid_bounded_vldata_intro
   ))))
   (ensures (
     let sz = log256' max in
-    valid_content_pos (parse_bounded_vldata min max p) h input pos (contents_exact p h input (pos `U32.add` U32.uint_to_t sz) pos') pos'
+    valid_content_pos (parse_bounded_vldata min max p) h input pos (contents_exact p h input.base (pos `U32.add` U32.uint_to_t sz) pos') pos'
   ))
 = valid_facts (parse_bounded_vldata min max p) h input pos;
   valid_facts (parse_vldata_gen (log256' max) (in_bounds min max) p) h input pos;
@@ -359,8 +359,8 @@ let valid_bounded_vldata_strong_elim
     sz + U32.v len_payload == content_length (parse_bounded_vldata_strong min max s) h input pos /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
     valid_pos (parse_bounded_vldata_strong min max s) h input pos (pos_payload `U32.add` len_payload) /\
-    valid_exact p h input pos_payload (pos_payload `U32.add` len_payload) /\
-    contents_exact p h input pos_payload (pos_payload `U32.add` len_payload) == contents (parse_bounded_vldata_strong min max s) h input pos
+    valid_exact p h input.base pos_payload (pos_payload `U32.add` len_payload) /\
+    contents_exact p h input.base pos_payload (pos_payload `U32.add` len_payload) == contents (parse_bounded_vldata_strong min max s) h input pos
   ))))
 = valid_facts (parse_bounded_vldata_strong min max s) h input pos;
   valid_facts (parse_bounded_vldata min max p) h input pos;
@@ -382,7 +382,7 @@ let valid_bounded_vldata_strong_intro
     let sz = log256' max in
     U32.v pos + sz <= U32.v input.len /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
-    valid_exact p h input pos_payload pos' /\ (
+    valid_exact p h input.base pos_payload pos' /\ (
     let len_payload = pos' `U32.sub` pos_payload in
     min <= U32.v len_payload /\ U32.v len_payload <= max /\
     valid (parse_bounded_integer sz) h input pos /\
@@ -390,7 +390,7 @@ let valid_bounded_vldata_strong_intro
   ))))
   (ensures (
     let sz = log256' max in
-    let x = contents_exact p h input (pos `U32.add` U32.uint_to_t sz) pos' in
+    let x = contents_exact p h input.base (pos `U32.add` U32.uint_to_t sz) pos' in
     parse_bounded_vldata_strong_pred min max s x /\
     valid_content_pos (parse_bounded_vldata_strong min max s) h input pos x pos'
   ))
@@ -414,14 +414,14 @@ let finalize_bounded_vldata_strong
     let sz = log256' max in
     U32.v pos + sz <= U32.v input.len /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
-    valid_exact p h input pos_payload pos' /\ (
+    valid_exact p h input.base pos_payload pos' /\ (
     let len_payload = pos' `U32.sub` pos_payload in
     min <= U32.v len_payload /\ U32.v len_payload <= max
   ))))
   (ensures (fun h _ h' ->
     let sz = log256' max in
-    let x = contents_exact p h input (pos `U32.add` U32.uint_to_t sz) pos' in
-    B.modifies (loc_slice_from_to input pos (pos `U32.add` U32.uint_to_t sz)) h h' /\
+    let x = contents_exact p h input.base (pos `U32.add` U32.uint_to_t sz) pos' in
+    B.modifies (loc_slice_from_to input.base pos (pos `U32.add` U32.uint_to_t sz)) h h' /\
     parse_bounded_vldata_strong_pred min max s x /\
     valid_content_pos (parse_bounded_vldata_strong min max s) h' input pos x pos'
   ))
@@ -449,17 +449,17 @@ let weak_finalize_bounded_vldata_strong
     let sz = log256' max in
     U32.v pos + sz <= U32.v input.len /\ (
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
-    valid_exact p h input pos_payload pos'
+    valid_exact p h input.base pos_payload pos'
   )))
   (ensures (fun h res h' ->
     let sz = log256' max in
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
     let len_payload = pos' `U32.sub` pos_payload in
-    B.modifies (loc_slice_from_to input pos (pos `U32.add` U32.uint_to_t sz)) h h' /\
+    B.modifies (loc_slice_from_to input.base pos (pos `U32.add` U32.uint_to_t sz)) h h' /\
     (res == true <==> (min <= U32.v len_payload /\ U32.v len_payload <= max)) /\
     (if res
     then
-      let x = contents_exact p h input pos_payload pos' in
+      let x = contents_exact p h input.base pos_payload pos' in
       parse_bounded_vldata_strong_pred min max s x /\
       valid_content_pos (parse_bounded_vldata_strong min max s) h' input pos x pos'
     else True

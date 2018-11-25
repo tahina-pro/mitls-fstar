@@ -405,71 +405,65 @@ let valid_facts
 
 abstract
 let loc_slice_from_to
-  (sl: slice)
+  (b: buffer8)
   (pos pos' : U32.t)
 : GTot B.loc
-= if U32.v pos' > U32.v sl.len
-  then loc_slice_from sl pos
+= if U32.v pos' > B.length b
+  then loc_slice_from ({ base = b; len = B.len b }) pos
   else if U32.v pos > U32.v pos'
   then B.loc_none
-  else B.loc_buffer (B.gsub sl.base pos (pos' `U32.sub` pos))
+  else B.loc_buffer (B.gsub b pos (pos' `U32.sub` pos))
 
 abstract
-let loc_slice_from_to_includes_intro (s: slice) (pos pos': U32.t) : Lemma
-  (B.loc_includes (loc_slice_from s pos) (loc_slice_from_to s pos pos'))
-  [SMTPat (loc_slice_from_to s pos pos')]
-= ()
-
-abstract
-let loc_includes_union_l_loc_slice_from_to (l1 l2: B.loc) (s: slice) (pos pos' : U32.t) : Lemma
+let loc_includes_union_l_loc_slice_from_to (l1 l2: B.loc) (s: buffer8) (pos pos' : U32.t) : Lemma
   (requires (B.loc_includes l1 (loc_slice_from_to s pos pos') \/ B.loc_includes l2 (loc_slice_from_to s pos pos')))
   (ensures (B.loc_includes (B.loc_union l1 l2) (loc_slice_from_to s pos pos')))
   [SMTPat (B.loc_includes (B.loc_union l1 l2) (loc_slice_from_to s pos pos'))]
 = ()
 
 abstract
-let loc_slice_from_to_includes_buffer (b: buffer8) (s: slice) (pos pos' : U32.t) : Lemma
-  (requires (b == s.base))
-  (ensures (B.loc_includes (B.loc_buffer b) (loc_slice_from_to s pos pos')))
-  [SMTPat (B.loc_includes (B.loc_buffer b) (loc_slice_from_to s pos pos'))]
+let loc_slice_from_to_includes_buffer (b: buffer8) (pos pos' : U32.t) : Lemma
+  (ensures (B.loc_includes (B.loc_buffer b) (loc_slice_from_to b pos pos')))
+  [SMTPat (loc_slice_from_to b pos pos')]
 = ()
 
 abstract
-let loc_slice_from_to_includes_addresses (r: HS.rid) (addrs: Set.set nat) (tg: bool) (s: slice) (pos pos' : U32.t) : Lemma
-  (requires (B.frameOf s.base == r /\ B.as_addr s.base `Set.mem` addrs))
-  (ensures (B.loc_includes (B.loc_addresses tg r addrs) (loc_slice_from_to s pos pos')))
-  [SMTPat (B.loc_includes (B.loc_addresses tg r addrs) (loc_slice_from_to s pos pos'))]
+let loc_slice_from_to_includes_addresses (r: HS.rid) (addrs: Set.set nat) (tg: bool) (b: buffer8) (pos pos' : U32.t) : Lemma
+  (requires (B.frameOf b == r /\ B.as_addr b `Set.mem` addrs))
+  (ensures (B.loc_includes (B.loc_addresses tg r addrs) (loc_slice_from_to b pos pos')))
+  [SMTPat (B.loc_includes (B.loc_addresses tg r addrs) (loc_slice_from_to b pos pos'))]
 = ()
 
 abstract
-let loc_slice_from_to_includes_regions (rs: Set.set HS.rid) (tg: bool) (s: slice) (pos pos' : U32.t) : Lemma
-  (requires (B.frameOf s.base `Set.mem` rs))
-  (ensures (B.loc_includes (B.loc_regions tg rs) (loc_slice_from_to s pos pos')))
-  [SMTPat (B.loc_includes (B.loc_regions tg rs) (loc_slice_from_to s pos pos'))]
+let loc_slice_from_to_includes_regions (rs: Set.set HS.rid) (tg: bool) (b: buffer8) (pos pos' : U32.t) : Lemma
+  (requires (B.frameOf b `Set.mem` rs))
+  (ensures (B.loc_includes (B.loc_regions tg rs) (loc_slice_from_to b pos pos')))
+  [SMTPat (B.loc_includes (B.loc_regions tg rs) (loc_slice_from_to b pos pos'))]
 = ()
 
 abstract
 let loc_slice_from_to_includes_r
   (sl: slice)
+  (b: buffer8)
   (pos0 pos pos' : U32.t)
 : Lemma
-  (requires (U32.v pos0 <= U32.v pos))
-  (ensures (B.loc_includes (loc_slice_from sl pos0) (loc_slice_from_to sl pos pos')))
-  [SMTPat (B.loc_includes (loc_slice_from sl pos0) (loc_slice_from_to sl pos pos'))]
+  (requires (sl.base == b /\ U32.v pos0 <= U32.v pos))
+  (ensures (B.loc_includes (loc_slice_from sl pos0) (loc_slice_from_to b pos pos')))
+  [SMTPat (B.loc_includes (loc_slice_from sl pos0) (loc_slice_from_to b pos pos'))]
 = ()
 
 abstract
 let loc_slice_from_to_eq
-  (sl: slice)
+  (b: buffer8)
   (pos pos' : U32.t)
 : Lemma
-  (requires (U32.v pos <= U32.v pos' /\ U32.v pos' <= U32.v sl.len))
-  (ensures (loc_slice_from_to sl pos pos' == B.loc_buffer (B.gsub sl.base pos (pos' `U32.sub` pos))))
+  (requires (U32.v pos <= U32.v pos' /\ U32.v pos' <= B.length b))
+  (ensures (loc_slice_from_to b pos pos' == B.loc_buffer (B.gsub b pos (pos' `U32.sub` pos))))
 = ()
 
 abstract
 let loc_slice_from_to_includes_l
-  (sl: slice)
+  (sl: buffer8)
   (posl posr posl' posr' : U32.t)
 : Lemma
   (requires (U32.v posl <= U32.v posl' /\ U32.v posr' <= U32.v posr))
@@ -479,7 +473,7 @@ let loc_slice_from_to_includes_l
 
 abstract
 let loc_slice_from_to_disjoint
-  (sl: slice)
+  (sl: buffer8)
   (posl1 posr1 posl2 posr2 : U32.t)
 : Lemma
   (requires (U32.v posr1 <= U32.v posl2))
@@ -490,11 +484,12 @@ let loc_slice_from_to_disjoint
 abstract
 let loc_slice_from_loc_slice_from_to_disjoint
   (sl: slice)
+  (b: buffer8)
   (pos1 pos2 pos' : U32.t)
 : Lemma
-  (requires (U32.v pos2 <= U32.v pos'))
-  (ensures (B.loc_disjoint (loc_slice_from_to sl pos1 pos2) (loc_slice_from sl pos')))
-  [SMTPat (B.loc_disjoint (loc_slice_from_to sl pos1 pos2) (loc_slice_from sl pos'))]
+  (requires (B.loc_disjoint (B.loc_buffer b) (B.loc_buffer sl.base) \/ (sl.base == b /\ U32.v pos2 <= U32.v pos')))
+  (ensures (B.loc_disjoint (loc_slice_from_to b pos1 pos2) (loc_slice_from sl pos')))
+  [SMTPat (B.loc_disjoint (loc_slice_from_to b pos1 pos2) (loc_slice_from sl pos'))]
 = ()
 
 let valid_exact'
@@ -502,15 +497,15 @@ let valid_exact'
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (b: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : GTot Type0
 = U32.v pos <= U32.v pos' /\
-  U32.v pos' <= U32.v s.len /\
-  live_slice h s /\ (
+  U32.v pos' <= B.length b /\
+  B.live h b /\ (
   let len' = pos' `U32.sub` pos in
-  match parse p (B.as_seq h (B.gsub s.base pos len')) with
+  match parse p (B.as_seq h (B.gsub b pos len')) with
   | None -> False
   | Some (_, consumed) -> (consumed <: nat) == U32.v len'
   )
@@ -521,7 +516,7 @@ let valid_exact
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (s: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : GTot Type0
@@ -533,7 +528,7 @@ let valid_exact_elim
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (s: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : Lemma
@@ -548,15 +543,15 @@ let valid_exact_elim'
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (s: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : Lemma
   (requires (valid_exact p h s pos pos'))
   (ensures (
-    live_slice h s /\
+    B.live h s /\
     U32.v pos <= U32.v pos' /\
-    U32.v pos' <= U32.v s.len /\ (
+    U32.v pos' <= B.length s /\ (
     let length = U32.v pos' - U32.v pos in
     k.parser_kind_low <= length /\ (
     match k.parser_kind_high with
@@ -572,7 +567,7 @@ let valid_exact_equiv
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (s: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : Lemma
@@ -584,13 +579,13 @@ let contents_exact'
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (s: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : Ghost t
   (requires (valid_exact' p h s pos pos'))
   (ensures (fun _ -> True))
-= let (Some (v, _)) = parse p (B.as_seq h (B.gsub s.base pos (pos' `U32.sub` pos))) in
+= let (Some (v, _)) = parse p (B.as_seq h (B.gsub s pos (pos' `U32.sub` pos))) in
   v
 
 abstract
@@ -599,7 +594,7 @@ let contents_exact
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (s: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : Ghost t
@@ -613,7 +608,7 @@ let contents_exact_eq
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (s: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : Lemma
@@ -627,13 +622,13 @@ let valid_exact_frame
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s: slice)
+  (s: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
   (l: B.loc)
   (h' : HS.mem)
 : Lemma
-  (requires (live_slice h s /\ B.modifies_inert l h h' /\ B.loc_disjoint l (loc_slice_from_to s pos pos')))
+  (requires (B.live h s /\ B.modifies_inert l h h' /\ B.loc_disjoint l (loc_slice_from_to s pos pos')))
   (ensures (
     (valid_exact p h s pos pos' \/ valid_exact p h' s pos pos') ==> (
     valid_exact p h' s pos pos' /\ contents_exact p h' s pos pos' == contents_exact p h s pos pos'
@@ -660,8 +655,8 @@ let valid_valid_exact
     let npos' = U32.v pos + content_length p h s pos in
     npos' <= U32.v s.len /\ (
     let pos' = U32.uint_to_t npos' in
-    valid_exact p h s pos pos' /\
-    contents_exact p h s pos pos' == contents p h s pos
+    valid_exact p h s.base pos pos' /\
+    contents_exact p h s.base pos pos' == contents p h s pos
   )))
 = let npos' = U32.v pos + content_length p h s pos in
   assert (npos' <= U32.v s.len);
@@ -682,8 +677,8 @@ let valid_pos_valid_exact
 : Lemma
   (requires (valid_pos p h s pos pos' /\ k.parser_kind_subkind == Some ParserStrong))
   (ensures (
-    valid_exact p h s pos pos' /\
-    contents_exact p h s pos pos' == contents p h s pos
+    valid_exact p h s.base pos pos' /\
+    contents_exact p h s.base pos pos' == contents p h s pos
   ))
 = valid_valid_exact p h s pos
 
@@ -693,15 +688,16 @@ let valid_pos_valid_exact_pat
   (p: parser k t)
   (h: HS.mem)
   (s: slice)
+  (b: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : Lemma
-  (requires (valid_pos p h s pos pos' /\ k.parser_kind_subkind == Some ParserStrong))
+  (requires (b == s.base /\ valid_pos p h s pos pos' /\ k.parser_kind_subkind == Some ParserStrong))
   (ensures (
-    valid_exact p h s pos pos' /\
-    contents_exact p h s pos pos' == contents p h s pos
+    valid_exact p h b pos pos' /\
+    contents_exact p h b pos pos' == contents p h s pos
   ))
-  [SMTPat (valid_exact p h s pos pos'); SMTPat (valid p h s pos)]
+  [SMTPat (valid_exact p h b pos pos'); SMTPat (valid p h s pos)]
 = valid_pos_valid_exact p h s pos pos'
 
 abstract
@@ -714,9 +710,9 @@ let valid_exact_valid
   (pos: U32.t)
   (pos' : U32.t)
 : Lemma
-  (requires (valid_exact p h s pos pos' /\ k.parser_kind_subkind == Some ParserStrong))
+  (requires (valid_exact p h s.base pos pos' /\ k.parser_kind_subkind == Some ParserStrong))
   (ensures (
-    valid_content_pos p h s pos (contents_exact p h s pos pos') pos'
+    valid_content_pos p h s pos (contents_exact p h s.base pos pos') pos'
   ))
 = assert (no_lookahead_on p (B.as_seq h (B.gsub s.base pos (pos' `U32.sub`pos))) (B.as_seq h (B.gsub s.base pos (s.len `U32.sub` pos))));
   assert (injective_precond p (B.as_seq h (B.gsub s.base pos (pos' `U32.sub` pos))) (B.as_seq h (B.gsub s.base pos (s.len `U32.sub` pos))));
@@ -728,14 +724,15 @@ let valid_exact_valid_pat
   (p: parser k t)
   (h: HS.mem)
   (s: slice)
+  (b: buffer8)
   (pos: U32.t)
   (pos' : U32.t)
 : Lemma
-  (requires (valid_exact p h s pos pos' /\ k.parser_kind_subkind == Some ParserStrong))
+  (requires (s.base == b /\ valid_exact p h b pos pos' /\ k.parser_kind_subkind == Some ParserStrong))
   (ensures (
-    valid_content_pos p h s pos (contents_exact p h s pos pos') pos'
+    valid_content_pos p h s pos (contents_exact p h b pos pos') pos'
   ))
-  [SMTPat (valid_exact p h s pos pos'); SMTPat (valid p h s pos)]
+  [SMTPat (valid_exact p h b pos pos'); SMTPat (valid p h s pos)]
 = valid_exact_valid p h s pos pos'
 
 let valid_pos_frame_strong_1
@@ -751,7 +748,7 @@ let valid_pos_frame_strong_1
 : Lemma
   (requires (
     valid_pos p h sl pos pos' /\
-    B.modifies_inert l h h' /\ B.loc_disjoint (loc_slice_from_to sl pos pos') l /\ k.parser_kind_subkind == Some ParserStrong))
+    B.modifies_inert l h h' /\ B.loc_disjoint (loc_slice_from_to sl.base pos pos') l /\ k.parser_kind_subkind == Some ParserStrong))
   (ensures (
     valid_pos p h sl pos pos' /\
     valid_content_pos p h' sl pos (contents p h sl pos) pos'
@@ -773,7 +770,7 @@ let valid_pos_frame_strong_2
   (requires (
     live_slice h sl /\
     valid_pos p h' sl pos pos' /\
-    B.modifies_inert l h h' /\ B.loc_disjoint (loc_slice_from_to sl pos pos') l /\ k.parser_kind_subkind == Some ParserStrong))
+    B.modifies_inert l h h' /\ B.loc_disjoint (loc_slice_from_to sl.base pos pos') l /\ k.parser_kind_subkind == Some ParserStrong))
   (ensures (
     valid_pos p h sl pos pos' /\
     valid_pos p h' sl pos pos' /\
@@ -795,7 +792,7 @@ let valid_pos_frame_strong
 : Lemma
   (requires (
     live_slice h sl /\
-    B.modifies_inert l h h' /\ B.loc_disjoint (loc_slice_from_to sl pos pos') l /\ k.parser_kind_subkind == Some ParserStrong))
+    B.modifies_inert l h h' /\ B.loc_disjoint (loc_slice_from_to sl.base pos pos') l /\ k.parser_kind_subkind == Some ParserStrong))
   (ensures (
     (valid_pos p h sl pos pos' \/ valid_pos p h' sl pos pos') ==> (
     valid_pos p h sl pos pos' /\
@@ -817,7 +814,7 @@ let valid_frame_strong
   (requires (
     live_slice h sl /\
     valid p h sl pos /\
-    B.modifies_inert l h h' /\ B.loc_disjoint (loc_slice_from_to sl pos (get_valid_pos p h sl pos)) l /\ k.parser_kind_subkind == Some ParserStrong))
+    B.modifies_inert l h h' /\ B.loc_disjoint (loc_slice_from_to sl.base pos (get_valid_pos p h sl pos)) l /\ k.parser_kind_subkind == Some ParserStrong))
   (ensures (
     valid_content_pos p h' sl pos (contents p h sl pos) (get_valid_pos p h sl pos)
   ))
@@ -835,19 +832,19 @@ let valid_exact_ext_intro
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s1: slice)
+  (s1: buffer8)
   (pos1: U32.t)
   (pos1' : U32.t)
-  (s2: slice)
+  (s2: buffer8)
   (pos2: U32.t)
   (pos2' : U32.t)
 : Lemma
   (requires (
     valid_exact p h s1 pos1 pos1' /\
-    live_slice h s2 /\
+    B.live h s2 /\
     U32.v pos1' - U32.v pos1 == U32.v pos2' - U32.v pos2 /\
-    U32.v pos2' <= U32.v s2.len /\
-    B.as_seq h (B.gsub s1.base pos1 (pos1' `U32.sub` pos1)) `Seq.equal` B.as_seq h (B.gsub s2.base pos2 (pos2' `U32.sub` pos2))
+    U32.v pos2' <= B.length s2 /\
+    B.as_seq h (B.gsub s1 pos1 (pos1' `U32.sub` pos1)) `Seq.equal` B.as_seq h (B.gsub s2 pos2 (pos2' `U32.sub` pos2))
   ))
   (ensures (
     valid_exact p h s2 pos2 pos2' /\
@@ -861,10 +858,10 @@ let valid_exact_ext_elim
   (#t: Type)
   (p: parser k t)
   (h: HS.mem)
-  (s1: slice)
+  (s1: buffer8)
   (pos1: U32.t)
   (pos1' : U32.t)
-  (s2: slice)
+  (s2: buffer8)
   (pos2: U32.t)
   (pos2' : U32.t)
 : Lemma
@@ -875,10 +872,10 @@ let valid_exact_ext_elim
   ))
   (ensures (
     U32.v pos2' - U32.v pos2 == U32.v pos1' - U32.v pos1 /\
-    B.as_seq h (B.gsub s1.base pos1 (pos1' `U32.sub` pos1)) == B.as_seq h (B.gsub s2.base pos2 (pos2' `U32.sub` pos2))
+    B.as_seq h (B.gsub s1 pos1 (pos1' `U32.sub` pos1)) == B.as_seq h (B.gsub s2 pos2 (pos2' `U32.sub` pos2))
   ))
-= assert (injective_precond p (B.as_seq h (B.gsub s1.base pos1 (pos1' `U32.sub` pos1))) (B.as_seq h (B.gsub s2.base pos2 (pos2' `U32.sub` pos2))));
-  assert (injective_postcond p (B.as_seq h (B.gsub s1.base pos1 (pos1' `U32.sub` pos1))) (B.as_seq h (B.gsub s2.base pos2 (pos2' `U32.sub` pos2))))
+= assert (injective_precond p (B.as_seq h (B.gsub s1 pos1 (pos1' `U32.sub` pos1))) (B.as_seq h (B.gsub s2 pos2 (pos2' `U32.sub` pos2))));
+  assert (injective_postcond p (B.as_seq h (B.gsub s1 pos1 (pos1' `U32.sub` pos1))) (B.as_seq h (B.gsub s2 pos2 (pos2' `U32.sub` pos2))))
 
 (* Accessors for reading only (no in-place serialization yet) *)
 
@@ -1501,7 +1498,7 @@ let slice_access_frame
     valid p1 h sl pos /\
     pre (contents p1 h sl pos) /\
     B.modifies_inert l h h' /\
-    B.loc_disjoint l (loc_slice_from_to sl pos (get_valid_pos p1 h sl pos))
+    B.loc_disjoint l (loc_slice_from_to sl.base pos (get_valid_pos p1 h sl pos))
   ))
   (ensures (
     valid p1 h' sl pos /\
@@ -1718,7 +1715,7 @@ let leaf_writer_strong
   HST.Stack U32.t
   (requires (fun h -> live_slice h sl /\ U32.v pos + serialized_length s x <= U32.v sl.len))
   (ensures (fun h pos' h' ->
-    B.modifies (loc_slice_from_to sl pos pos') h h' /\
+    B.modifies (loc_slice_from_to sl.base pos pos') h h' /\
     valid_content_pos p h' sl pos x pos'
   ))
 
@@ -1803,10 +1800,10 @@ let copy_strong
     let clen = content_length p h src spos in
     U32.v dpos + clen <= U32.v dst.len /\
     live_slice h dst /\
-    B.loc_disjoint (loc_slice_from_to src spos spos') (loc_slice_from_to dst dpos (dpos `U32.add` (U32.uint_to_t clen)))
+    B.loc_disjoint (loc_slice_from_to src.base spos spos') (loc_slice_from_to dst.base dpos (dpos `U32.add` (U32.uint_to_t clen)))
   )))
   (ensures (fun h dpos' h' ->
-    B.modifies (loc_slice_from_to dst dpos dpos') h h' /\
+    B.modifies (loc_slice_from_to dst.base dpos dpos') h h' /\
     valid_content_pos p h' dst dpos (contents p h src spos) dpos'
   ))
 = let h0 = HST.get () in
@@ -1817,7 +1814,7 @@ let copy_strong
   let h = HST.get () in
   [@inline_let] let dpos' = dpos `U32.add` len in
   assert (
-    B.modifies (loc_slice_from_to dst dpos dpos') h0 h
+    B.modifies (loc_slice_from_to dst.base dpos dpos') h0 h
   );
   assert (no_lookahead_on p (B.as_seq h0 (B.gsub src.base spos (src.len `U32.sub` spos))) (B.as_seq h (B.gsub dst.base dpos (dst.len `U32.sub` dpos))));
   assert (no_lookahead_on_postcond p (B.as_seq h0 (B.gsub src.base spos (src.len `U32.sub` spos))) (B.as_seq h (B.gsub dst.base dpos (dst.len `U32.sub` dpos))));
@@ -1841,10 +1838,10 @@ let copy_strong'
     let clen = content_length p h src spos in
     U32.v dpos + clen <= U32.v dst.len /\
     live_slice h dst /\
-    B.loc_disjoint (loc_slice_from src spos) (loc_slice_from_to dst dpos (dpos `U32.add` (U32.uint_to_t clen)))
+    B.loc_disjoint (loc_slice_from src spos) (loc_slice_from_to dst.base dpos (dpos `U32.add` (U32.uint_to_t clen)))
   )))
   (ensures (fun h dpos' h' ->
-    B.modifies (loc_slice_from_to dst dpos dpos') h h' /\
+    B.modifies (loc_slice_from_to dst.base dpos dpos') h h' /\
     valid_content_pos p h' dst dpos (contents p h src spos) dpos'
   ))
 = let spos' = j src spos in
@@ -1868,7 +1865,7 @@ let copy_weak_with_length
     live_slice h dst /\
     U32.v dpos <= U32.v dst.len /\
     U32.v dst.len < U32.v max_uint32 /\
-    B.loc_disjoint (loc_slice_from_to src spos spos') (loc_slice_from dst dpos)
+    B.loc_disjoint (loc_slice_from_to src.base spos spos') (loc_slice_from dst dpos)
   ))
   (ensures (fun h dpos' h' ->
     B.modifies (loc_slice_from dst dpos) h h' /\ (
@@ -1914,19 +1911,21 @@ let copy_weak
 
 let loc_includes_loc_slice_from_loc_slice_from_to
   (s: slice)
+  (b: buffer8)
   (pos pos1 pos2: U32.t)
 : Lemma
-  (requires (U32.v pos <= U32.v pos1))
-  (ensures (B.loc_includes (loc_slice_from s pos) (loc_slice_from_to s pos1 pos2)))
-  [SMTPat (B.loc_includes (loc_slice_from s pos) (loc_slice_from_to s pos1 pos2))]
+  (requires (s.base == b /\ U32.v pos <= U32.v pos1))
+  (ensures (B.loc_includes (loc_slice_from s pos) (loc_slice_from_to b pos1 pos2)))
+  [SMTPat (B.loc_includes (loc_slice_from s pos) (loc_slice_from_to b pos1 pos2))]
 = assert (B.loc_includes (loc_slice_from s pos) (loc_slice_from s pos1))
 
 let loc_disjoint_loc_slice_from_to
   (l: B.loc)
   (s: slice)
+  (b: buffer8)
   (pos pos1 pos2: U32.t)
 : Lemma
-  (requires (B.loc_disjoint l (loc_slice_from s pos) /\ U32.v pos <= U32.v pos1))
-  (ensures (B.loc_disjoint l (loc_slice_from_to s pos1 pos2)))
-  [SMTPat (B.loc_disjoint l (loc_slice_from_to s pos1 pos2)); SMTPat (B.loc_disjoint l (loc_slice_from s pos))]
+  (requires (s.base == b /\ B.loc_disjoint l (loc_slice_from s pos) /\ U32.v pos <= U32.v pos1))
+  (ensures (B.loc_disjoint l (loc_slice_from_to b pos1 pos2)))
+  [SMTPat (B.loc_disjoint l (loc_slice_from_to b pos1 pos2)); SMTPat (B.loc_disjoint l (loc_slice_from s pos))]
 = assert (B.loc_includes (loc_slice_from s pos) (loc_slice_from s pos1))

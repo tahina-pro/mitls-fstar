@@ -97,7 +97,7 @@ val finalize_case_ticketContents12
   ))
   (ensures (fun h pos' h' ->
     let pos1 = pos `U32.add` 1ul in
-    B.modifies (LP.loc_slice_from_to input pos pos1) h h' /\
+    B.modifies (LP.loc_slice_from_to input.LP.base pos pos1) h h' /\
     LP.valid_content_pos
       ticketContents_parser
       h'
@@ -119,7 +119,7 @@ val finalize_case_ticketContents13
   ))
   (ensures (fun h pos' h' ->
     let pos1 = pos `U32.add` 1ul in
-    B.modifies (LP.loc_slice_from_to input pos pos1) h h' /\
+    B.modifies (LP.loc_slice_from_to input.LP.base pos pos1) h h' /\
     LP.valid_content_pos
       ticketContents_parser
       h'

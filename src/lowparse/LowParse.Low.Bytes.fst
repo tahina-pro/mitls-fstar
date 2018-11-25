@@ -201,15 +201,15 @@ let valid_exact_all_bytes_elim
   (input: slice)
   (pos pos' : U32.t)
 : Lemma
-  (requires (valid_exact parse_all_bytes h input pos pos'))
+  (requires (valid_exact parse_all_bytes h input.base pos pos'))
   (ensures (
-    let x = contents_exact parse_all_bytes h input pos pos' in
+    let x = contents_exact parse_all_bytes h input.base pos pos' in
     let length = U32.v pos' - U32.v pos in
     BY.length x == length /\
     valid_content_pos (parse_flbytes length) h input pos x pos'
   ))
-= valid_exact_equiv parse_all_bytes h input pos pos' ;
-  contents_exact_eq parse_all_bytes h input pos pos' ;
+= valid_exact_equiv parse_all_bytes h input.base pos pos' ;
+  contents_exact_eq parse_all_bytes h input.base pos pos' ;
   let length = U32.v pos' - U32.v pos in
   valid_facts (parse_flbytes length) h input pos ;
   assert (no_lookahead_on (parse_flbytes length) (B.as_seq h (B.gsub input.base pos (pos' `U32.sub` pos))) (B.as_seq h (B.gsub input.base pos (input.len `U32.sub` pos))));
@@ -395,7 +395,7 @@ let finalize_bounded_vlbytes
   (ensures (fun h pos' h' ->
     let sz = log256' max in  
     let pos_payload = pos `U32.add` U32.uint_to_t sz in
-    B.modifies (loc_slice_from_to input pos pos_payload) h h' /\
+    B.modifies (loc_slice_from_to input.base pos pos_payload) h h' /\
     valid_content_pos (parse_bounded_vlbytes min max) h' input pos (contents (parse_flbytes (U32.v len)) h input pos_payload) pos' /\
     U32.v pos' == U32.v pos_payload + U32.v len
   ))
